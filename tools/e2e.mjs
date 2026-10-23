@@ -71,7 +71,7 @@ function services(href) {
 
 const PAGES = [
   { url: 'https://www.leboncoin.fr/ad/locations/2981234567', file: 'leboncoin-paris.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 156\u00a0€ de trop par mois' } },
-  { url: 'https://www.seloger.com/annonces/locations/appartement/lyon-3eme-69/part-dieu/212345678.htm', file: 'seloger-lyon.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 57\u00a0€ de trop par mois' } },
+  { url: 'https://www.seloger.com/annonces/locations/appartement/lyon-3eme-69/part-dieu/212345678.htm', file: 'seloger-lyon.html', expect: { title: 'Risque de dépassement : 49\u00a0%', detail: 'Selon l’époque de construction' } },
   { url: 'https://www.pap.fr/annonces/appartement-montpellier-34000-r412345678', file: 'pap-montpellier.html', expect: { title: 'Loyer conforme à l’encadrement', detail: 'Plafond : 720\u00a0€ hors charges' } },
   { url: 'https://www.seloger.com/annonces/253456789.htm', file: 'seloger-bordeaux.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 13\u00a0€ de trop par mois' } },
   { url: 'https://www.bienici.com/annonce/location/montpellier/appartement/2pieces/ag340000-1', file: 'bienici-montpellier.html', expect: { title: 'Loyer conforme à l’encadrement', detail: 'Plafond : 720\u00a0€ hors charges' } },
@@ -158,18 +158,16 @@ try {
     }
 
     if (page.file === 'seloger-lyon.html') {
-      // Époque inconnue : on précise « 1946 à 1970 » dans le formulaire, le plafond devient exact.
-      await chrome.evaluate(s, `(() => {
-        const root = document.querySelector('[data-check-mon-loyer]').shadowRoot;
-        root.querySelector('details.edit').open = true;
-        root.querySelector('select[name="period"]').value = '1946-1970';
-        root.querySelector('form').requestSubmit();
-      })()`);
+      // Époque inconnue : la question « avant 1946 ? » est proposée ; « Non » tranche (seule l'époque 1946-1970 reste).
+      const question = await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.question-text')?.textContent`);
+      check('question proposée : avant 1946 ?', () => assert.equal(question, 'Le bâtiment date-t-il d’avant 1946 ?'));
+      await chrome.screenshot(s, join(OUT, `${prefix}-question.png`));
+      await chrome.evaluate(s, `[...document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelectorAll('.answer')].find((b) => b.textContent === 'Non').click()`);
       await sleep(1500);
       const figures = await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.figures')?.textContent`);
-      check('correction de l’époque : plafond exact', () => assert.match(figures, /14,40\u00a0€\/m² × 38\u00a0m² = 547\u00a0€ hors charges/));
+      check('réponse « Non » : plafond exact', () => assert.match(figures, /14,40\u00a0€\/m² × 38\u00a0m² = 547\u00a0€ hors charges/));
       const after = await pill(s);
-      check('pastille après correction : 103 € de trop', () => assert.deepEqual(after, { title: 'Loyer au-dessus du plafond', detail: '103\u00a0€ de trop par mois' }));
+      check('pastille après réponse : 13 € de trop', () => assert.deepEqual(after, { title: 'Loyer au-dessus du plafond', detail: '13\u00a0€ de trop par mois' }));
       await chrome.screenshot(s, join(OUT, `${prefix}-panneau-corrige.png`));
     }
   }

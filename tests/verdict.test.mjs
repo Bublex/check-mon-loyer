@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { parsePeriod, periodOverlaps, gridRooms, parseFurnished, orderTriplet, makeRow, parseYear } from '../extension/lib/grid.js';
 import { evaluate, rentRange } from '../extension/lib/verdict.js';
 import { findTerritory } from '../extension/lib/territories.js';
+import { periodSharesFor, periodWeight } from '../extension/lib/periods.js';
 
 test('Époques : libellés des grilles', () => {
   assert.deepEqual(parsePeriod('Avant 1946'), { label: 'Avant 1946', from: null, to: 1945 });
@@ -120,4 +121,39 @@ test('Territoires : communes encadrées', () => {
   assert.equal(findTerritory('33063').id, 'bordeaux');
   assert.equal(findTerritory('33281'), null, 'Mérignac n’est pas encadrée');
   assert.equal(findTerritory('64122').id, 'pays-basque');
+});
+
+test('Époque inconnue : probabilité de dépassement pondérée par les logements de la commune', () => {
+  const paris = periodSharesFor('75111');
+  assert.equal(paris.name, 'Paris');
+  // Avant 1946 = avant 1919 + 1919-1945 ; après 1990 = 1991-2005 + 2006 et après.
+  assert.ok(Math.abs(periodWeight({ from: null, to: 1945 }, null, paris) - 48.7) < 1e-9);
+  assert.ok(Math.abs(periodWeight({ from: 1991, to: null }, null, paris) - 10.6) < 1e-9);
+
+  // 1 050 € hors charges : au-dessus du plafond pour 1946-1970 (1 008 €) et 1971-1990 (960 €), pas avant 1946 (1 104 €) ni après 1990 (1 056 €).
+  const unknown = listing({ construction: null, rent: { amount: 1050, chargesIncluded: false } });
+  const v = evaluate(unknown, grid, { periodShares: paris });
+  assert.equal(v.status, 'depends');
+  assert.ok(Math.abs(v.probability - 40.6 / 99.9) < 1e-6, String(v.probability));
+  assert.equal(evaluate(unknown, grid).probability, 0.5, 'sans répartition connue, chaque époque compte autant');
+  // La question la plus utile : avant 1946 (oui : conforme ; non : dépassement probable).
+  assert.equal(v.question.text, 'Le bâtiment date-t-il d’avant 1946 ?');
+  assert.deepEqual(v.question.yes.construction, { from: null, to: 1945, label: 'Avant 1946' });
+
+  const after1946 = evaluate({ ...unknown, construction: v.question.no.construction }, grid, { periodShares: paris });
+  assert.ok(Math.abs(after1946.probability - 40.6 / 51.2) < 1e-6);
+  assert.equal(after1946.question.text, 'Le bâtiment date-t-il d’avant 1991 ?');
+  const settled = evaluate({ ...unknown, construction: after1946.question.yes.construction }, grid, { periodShares: paris });
+  assert.equal(settled.status, 'over');
+  assert.deepEqual(settled.periods, ['1946-1970', '1971-1990']);
+});
+
+test('Probabilité : pas de score sans le loyer hors charges, question sur le meublé quand c’est lui qui compte', () => {
+  assert.equal(evaluate(listing({ construction: null, rent: { amount: 1200, chargesIncluded: null } }), grid).probability, undefined);
+  // Avant 1946 connu, meublé inconnu : vide 1 104 €, meublé 1 248 € (31,20 €/m²) ; 1 150 € dépasse seulement en vide.
+  const v = evaluate(listing({ furnished: null, rent: { amount: 1150, chargesIncluded: false } }), grid);
+  assert.equal(v.status, 'depends');
+  assert.equal(v.probability, 0.5);
+  assert.equal(v.question.topic, 'furnished');
+  assert.deepEqual(v.question.no, { furnished: false });
 });

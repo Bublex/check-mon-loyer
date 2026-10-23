@@ -7,6 +7,7 @@
 // on considère toutes les possibilités : le verdict n'est tranché que s'il vaut pour toutes.
 
 import { gridRooms, periodOverlaps, periodKnown, parseKind } from './grid.js';
+import { periodWeight } from './periods.js';
 
 const TOLERANCE = 1; // euro : les grilles et les annonces arrondissent.
 
@@ -56,7 +57,7 @@ const uniq = (list) => [...new Set(list.filter((x) => x !== '' && x != null))];
 /**
  * @param listing { surface, rooms, furnished, kind, construction: {from,to}|null, rent: {amount, chargesIncluded, charges, complement, base}, dpe }
  * @param rows lignes de grille (voir grid.js), déjà limitées au(x) secteur(s) possibles du logement
- * @param location { approximate } : l'adresse exacte est-elle connue ?
+ * @param location { approximate, periodShares } : l'adresse exacte est-elle connue ? répartition des logements par époque
  */
 export function evaluate(listing, rows, location = {}) {
   const rooms = gridRooms(listing.rooms);
@@ -108,5 +109,62 @@ export function evaluate(listing, rows, location = {}) {
   }
   // Entre les deux : le verdict dépend d'une information manquante.
   if (rent.lo == null && rent.hi > ceiling.high + TOLERANCE) spread.push('charges');
-  return { ...result, status: 'depends', overByMax: roundEuro(rent.hi - ceiling.low) };
+  const depends = { ...result, status: 'depends', overByMax: roundEuro(rent.hi - ceiling.low) };
+  // Charges inconnues : le loyer hors charges l'est aussi, pas de probabilité possible.
+  if (rent.lo == null) return depends;
+  const odds = overOdds(candidates, listing, rent.lo, location.periodShares);
+  return { ...depends, probability: odds.probability, question: bestQuestion(candidates, listing, rent.lo, location.periodShares), weighted: Boolean(location.periodShares) };
+}
+
+// --- Probabilité de dépassement et question la plus utile ---
+
+const exceeds = (row, surface, rentHC) => rentHC > roundEuro(row.max * surface) + TOLERANCE;
+
+/**
+ * Part des cas possibles où le loyer dépasse le plafond. Chaque ligne de grille encore possible est un cas ;
+ * son poids est la part des logements de la commune construits à cette époque (Insee), les autres
+ * inconnues (secteur, meublé, type de logement) comptant à parts égales.
+ */
+function overOdds(rows, listing, rentHC, shares) {
+  let total = 0;
+  let over = 0;
+  for (const row of rows) {
+    const w = periodWeight(row.period, listing.construction, shares);
+    total += w;
+    if (exceeds(row, listing.surface, rentHC)) over += w;
+  }
+  return { probability: total ? over / total : null, total };
+}
+
+const entropy = (p) => (p <= 0 || p >= 1 ? 0 : -(p * Math.log2(p) + (1 - p) * Math.log2(1 - p)));
+
+/** Question oui/non qui réduit le plus l'incertitude : époque (« avant 1946 ? »), meublé, maison. */
+function bestQuestion(rows, listing, rentHC, shares) {
+  const all = overOdds(rows, listing, rentHC, shares);
+  const options = [];
+  const split = (inYes, question) => {
+    const yes = rows.filter(inYes);
+    const no = rows.filter((r) => !inYes(r));
+    if (!yes.length || !no.length) return;
+    const a = overOdds(yes, listing, rentHC, shares);
+    const b = overOdds(no, listing, rentHC, shares);
+    const m = a.total / all.total;
+    const gain = entropy(all.probability) - m * entropy(a.probability) - (1 - m) * entropy(b.probability);
+    options.push({ ...question, gain });
+  };
+  const c = listing.construction || {};
+  const bounds = [...new Set(rows.map((r) => r.period.from).filter((y) => y != null))].sort((x, y) => x - y);
+  for (const year of bounds) {
+    split((r) => r.period.to != null && r.period.to < year, {
+      topic: 'period',
+      text: `Le bâtiment date-t-il d’avant ${year} ?`,
+      hint: year === 1946 ? 'Un immeuble haussmannien ou en pierre de taille date d’avant 1946.' : null,
+      yes: { construction: { from: c.from ?? null, to: year - 1, label: c.from != null ? `${c.from} à ${year - 1}` : `Avant ${year}` } },
+      no: { construction: { from: year, to: c.to ?? null, label: c.to != null ? `${year} à ${c.to}` : `${year} ou après` } },
+    });
+  }
+  if (listing.furnished == null) split((r) => r.furnished, { topic: 'furnished', text: 'Le logement est-il loué meublé ?', yes: { furnished: true }, no: { furnished: false } });
+  if (parseKind(listing.kind) == null) split((r) => r.kind === 'maison', { topic: 'kind', text: 'Est-ce une maison ?', yes: { kind: 'maison' }, no: { kind: 'appartement' } });
+  const best = options.sort((x, y) => y.gain - x.gain)[0];
+  return best && best.gain > 0.01 ? best : null;
 }

@@ -4,6 +4,7 @@ Extension Chrome. Sur une annonce de location (Leboncoin, SeLoger, PAP, Bien'ici
 
 - **Plafond calculé** avec les loyers de référence publiés en données ouvertes : loyer de référence majoré (€/m²) × surface habitable, comparé au loyer hors charges.
 - **Verdict prudent** : quand l'annonce ne dit pas tout (époque de construction, meublé ou non, adresse exacte, montant des charges), toutes les possibilités sont calculées. Le verdict n'est tranché (« au-dessus » ou « conforme ») que s'il vaut pour toutes ; sinon la pastille dit de quoi il dépend.
+- **Risque de dépassement** quand le verdict dépend d'une inconnue, le plus souvent l'année de construction : chaque époque de la grille compte pour la part des logements de la commune qui en datent (recensement de l'Insee). En dessous, une question oui/non choisie pour trancher au plus vite (« Le bâtiment date-t-il d'avant 1946 ? », « Le logement est-il loué meublé ? ») relance le calcul.
 - **Complément de loyer** pris à part, et signalé quand il est interdit (logement classé F ou G).
 - **Fenêtre de l'extension** (icône de la barre d'outils) : vérification d'un logement décrit à la main, sur n'importe quel site.
 
@@ -112,6 +113,7 @@ Interroge en direct les services publics avec le code de l'extension (Paris, Lyo
 
 - **Pas encore vérifiée sur les vrais sites ni sur les vrais services.** L'extension a été écrite dans un environnement sans accès à ces sites : la lecture des annonces suit leur structure publique connue, et les adresses et formats des services de données viennent de leur documentation et de clients existants. À la première utilisation, lancer `npm run check:live`, puis ouvrir quelques annonces réelles ; si une valeur est mal lue, le formulaire du panneau permet de la corriger.
 - Les grilles en données ouvertes sont indicatives : seul l'arrêté préfectoral fait foi.
+- Le risque de dépassement est une estimation : il pondère les époques par la répartition de toutes les résidences principales de la commune (propriétaires compris), et compte à parts égales les autres inconnues. Pour Villeurbanne, la répartition vient d'un recensement antérieur relayé par un site tiers.
 - Plaine Commune et Est Ensemble ne sont pas encore calculés (grilles distinctes pour les maisons et les appartements, comme Bordeaux).
 - Bordeaux : les zones viennent de la carte officielle, calée sur le contour de la commune à quelques dizaines de mètres près. La zone d'une adresse est celle de son îlot IRIS ; un îlot que la carte partage entre deux zones reçoit les deux (fourchette de plafonds).
 - Quand l'annonce ne donne qu'une position approximative, le plafond couvre les secteurs voisins : indiquer l'adresse dans le formulaire l'affine.

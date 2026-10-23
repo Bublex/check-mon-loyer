@@ -33,14 +33,11 @@ const handlers = {
     state.inputs = {
       ...state.inputs,
       location,
+      // Formulaire complet ou simple réponse à une question (« avant 1946 ? ») : seules les valeurs données changent.
       listing: {
         ...state.inputs.listing,
-        surface: edits.surface,
-        rooms: edits.rooms,
-        furnished: edits.furnished,
-        kind: edits.kind,
-        construction: edits.construction,
-        rent: { ...state.inputs.listing.rent, ...edits.rent, base: null },
+        ...Object.fromEntries(['surface', 'rooms', 'furnished', 'kind', 'construction'].filter((k) => k in edits).map((k) => [k, edits[k]])),
+        rent: edits.rent ? { ...state.inputs.listing.rent, ...edits.rent, base: null } : state.inputs.listing.rent,
       },
     };
     run();

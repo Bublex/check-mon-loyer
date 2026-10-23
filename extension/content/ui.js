@@ -51,6 +51,9 @@
   const perM2 = (n) => `${m2Fmt.format(n)}\u00a0€/m²`;
   const m2 = (n) => `${euroFmt.format(n)}\u00a0m²`;
 
+  /** Pourcentage arrondi, jamais 0 % ni 100 % pour un verdict qui reste incertain. */
+  const percent = (p) => `${Math.min(99, Math.max(1, Math.round(p * 100)))}\u00a0%`;
+
   function joinFr(list) {
     if (list.length < 2) return list.join('');
     return `${list.slice(0, -1).join(', ')} et ${list[list.length - 1]}`;
@@ -83,7 +86,7 @@
     if (construction.inferred) return 'inferred';
     if (construction.from != null && construction.from === construction.to) return `year:${construction.from}`;
     const hit = PERIODS.find(([, , range]) => range && range.from === construction.from && range.to === construction.to);
-    return hit ? hit[0] : '';
+    return hit ? hit[0] : 'current';
   }
 
   function constructionFromChoice(value) {
@@ -118,6 +121,7 @@
       case 'under':
         return { tone: 'ok', title: 'Loyer conforme à l’encadrement', detail: `Plafond : ${eur(v.ceiling.low)} hors charges` };
       case 'depends':
+        if (v.probability != null) return { tone: 'wait', title: `Risque de dépassement : ${percent(v.probability)}`, detail: v.spread.length ? `Selon ${SPREAD[v.spread[0]]}` : 'À préciser' };
         return { tone: 'wait', title: 'Peut dépasser le plafond', detail: v.spread.length ? `Selon ${SPREAD[v.spread[0]]}` : 'À préciser' };
       case 'incomplete':
         return { tone: 'info', title: 'Loyer encadré : à compléter', detail: v.missing?.length ? `Précisez ${MISSING[v.missing[0]]}` : 'Informations manquantes' };
@@ -167,6 +171,9 @@
       case 'under':
         return ['ok', 'check', 'Loyer conforme à l’encadrement', `Il reste ${eur(v.margin)} sous le plafond.`];
       case 'depends':
+        if (v.probability != null) {
+          return ['wait', 'help', `Risque de dépassement : ${percent(v.probability)}`, `Le plafond dépend de ${joinFr(v.spread.map((k) => SPREAD[k]))}.`];
+        }
         return ['wait', 'help', 'Peut dépasser le plafond',
           `Le verdict dépend de ${joinFr(v.spread.map((k) => SPREAD[k]))}. Précisez-le ci-dessous.`];
       case 'incomplete':
@@ -190,7 +197,17 @@
     }
   }
 
-  function renderVerdict(state) {
+  /** Question oui/non pour affiner (« Le bâtiment date-t-il d'avant 1946 ? ») : la réponse relance le calcul. */
+  function renderQuestion(question, handlers) {
+    return h('div', { class: 'question' },
+      h('div', { class: 'question-text' }, question.text),
+      question.hint ? h('div', { class: 'question-hint' }, question.hint) : null,
+      h('div', { class: 'question-actions' },
+        h('button', { class: 'answer', type: 'button', onclick: () => handlers.onEdit?.(question.yes) }, 'Oui'),
+        h('button', { class: 'answer', type: 'button', onclick: () => handlers.onEdit?.(question.no) }, 'Non')));
+  }
+
+  function renderVerdict(state, handlers = {}) {
     const r = state.result;
     const v = r.verdict || {};
     const inputs = state.inputs || {};
@@ -203,6 +220,9 @@
       h('div', { class: `verdict tone-${tone}` },
         h('div', { class: 'verdict-icon' }, icon(ico, 18)),
         h('div', { class: 'verdict-text' }, h('div', { class: 'verdict-title' }, title), text ? h('p', null, text) : null)),
+      v.probability != null ? h('div', { class: 'meter', role: 'img', 'aria-label': `Risque de dépassement : ${percent(v.probability)}` },
+        h('span', { class: 'meter-fill', style: `width: ${Math.round(v.probability * 100)}%` })) : null,
+      v.question ? renderQuestion(v.question, handlers) : null,
       lines.length ? h('dl', { class: 'figures' }, lines.flatMap(([k, val]) => [h('dt', null, k), h('dd', null, val)])) : null,
     ];
     // Ce que l'adresse saisie a donné : l'adresse retenue, ou l'échec du géocodage.
@@ -226,6 +246,8 @@
         v.zones?.length ? `${v.zones.length > 1 ? 'Secteurs' : 'Secteur'} : ${v.zones.join(', ')}` : null,
         v.periods?.length ? `Époque${v.periods.length > 1 ? 's' : ''} : ${v.periods.join(', ')}` : null,
         v.years?.length ? `Grille ${v.years.join(', ')}` : null,
+        v.probability != null && v.weightSource ? `Risque estimé d’après la répartition des logements de ${v.weightSource.name} par époque de construction (${v.weightSource.source}), les autres inconnues comptant à parts égales` : null,
+        v.probability != null && !v.weightSource ? 'Risque estimé en comptant chaque cas possible à parts égales' : null,
         r.place?.approximate ? 'Position approximative : indiquez l’adresse pour affiner' : null,
       ].filter(Boolean);
       out.push(h('details', { class: 'facts' }, h('summary', null, 'Détail du calcul'), h('ul', null, facts.map((f) => h('li', null, f)))));
@@ -260,7 +282,7 @@
     const periodOptions = [...PERIODS.map(([k, label]) => [k, label])];
     const choice = periodChoice(construction);
     if (choice.startsWith('year:')) periodOptions.splice(1, 0, [choice, `Construit en ${choice.slice(5)}`]);
-    else if (choice === 'inferred') periodOptions.splice(1, 0, ['inferred', construction.label]);
+    else if (choice === 'inferred' || choice === 'current') periodOptions.splice(1, 0, [choice, construction.label || 'Époque précisée']);
 
     const form = h('form', { class: 'form', novalidate: true },
       field('Adresse du logement', h('input', { name: 'address', type: 'text', autocomplete: 'street-address', placeholder: 'Ex. 12 rue Oberkampf, Paris', value: loc.address || '' }),
@@ -294,7 +316,7 @@
         rooms: num('rooms'),
         furnished: data.get('furnished') === '' ? null : data.get('furnished') === 'true',
         kind: String(data.get('kind') || '') || null,
-        construction: period === 'inferred' ? construction : constructionFromChoice(period),
+        construction: period === 'inferred' || period === 'current' ? construction : constructionFromChoice(period),
         rent: { amount: num('amount'), chargesIncluded: data.get('chargesIncluded') !== 'false', charges: num('charges'), complement: num('complement') },
       });
     });
@@ -308,7 +330,7 @@
     else if (state.error) parts.push(h('div', { class: 'verdict tone-err' }, h('div', { class: 'verdict-icon' }, icon('alert', 18)),
       h('div', { class: 'verdict-text' }, h('div', { class: 'verdict-title' }, 'Vérification impossible'), h('p', null, `${state.error}. `,
         h('button', { class: 'link', type: 'button', onclick: () => handlers.onRefresh?.() }, 'Réessayer')))));
-    else if (state.result) parts.push(...renderVerdict(state));
+    else if (state.result) parts.push(...renderVerdict(state, handlers));
     const status = state.result?.status;
     const formOpen = options.formOpen ?? ['depends', 'incomplete', 'nolocation', 'nodata'].includes(status);
     if (!state.loading && status !== 'roomshare') parts.push(renderForm(state, handlers, { open: formOpen, submitLabel: options.submitLabel }));
@@ -452,6 +474,15 @@ button, input, select { font: inherit; color: inherit; }
 .verdict.tone-err { background: var(--err-bg); } .verdict.tone-err .verdict-icon, .verdict.tone-err .verdict-title { color: var(--err); }
 .verdict.tone-wait { background: var(--wait-bg); } .verdict.tone-wait .verdict-icon, .verdict.tone-wait .verdict-title { color: var(--wait); }
 .verdict.tone-info { background: var(--info-bg); } .verdict.tone-info .verdict-icon, .verdict.tone-info .verdict-title { color: var(--info); }
+.meter { flex: none; height: 6px; border-radius: 999px; background: var(--ok-bg); overflow: hidden; }
+.meter-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--wait), var(--err)); }
+.question { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+.question-text { font-weight: 650; }
+.question-hint { margin-top: 2px; color: var(--muted); font-size: 12px; }
+.question-actions { display: flex; gap: 8px; margin-top: 8px; }
+.answer { min-width: 64px; padding: 6px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--bg); color: var(--accent); font-weight: 600; cursor: pointer; }
+.answer:hover { background: var(--accent); color: var(--accent-fg); }
+.answer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .figures { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
 .figures dt { color: var(--muted); }
 .figures dd { margin: 0; font-weight: 600; }

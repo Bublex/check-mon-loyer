@@ -2,6 +2,7 @@
 
 import { geocode, reverse } from './geo.js';
 import { findTerritory } from './territories.js';
+import { periodSharesFor } from './periods.js';
 import { evaluate } from './verdict.js';
 import { parisRows } from './sources/paris.js';
 import { lyonRows } from './sources/lyon.js';
@@ -77,6 +78,7 @@ export async function checkListing(input, { signal, today } = {}) {
 
   const rows = await SOURCES[territory.source]({ lat: place.lat, lon: place.lon, radius: place.radius, citycode: place.citycode }, { signal, today });
   if (!rows.length) return { status: 'nodata', place: placeInfo, territory: territoryInfo };
-  const verdict = evaluate(input.listing || {}, rows, { approximate: place.radius > 0 });
+  const verdict = evaluate(input.listing || {}, rows, { approximate: place.radius > 0, periodShares: periodSharesFor(place.citycode) });
+  if (verdict.weighted) verdict.weightSource = periodSharesFor(place.citycode);
   return { status: verdict.status, place: placeInfo, territory: territoryInfo, verdict };
 }
