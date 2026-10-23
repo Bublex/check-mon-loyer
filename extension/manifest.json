@@ -4,7 +4,7 @@
   "short_name": "Loyer Juste",
   "version": "1.0.0",
   "description": "Sur une annonce de location, voyez si le loyer dépasse le plafond légal de l'encadrement des loyers, et de combien.",
-  "homepage_url": "https://github.com/Bublex/biblib/tree/main/loyer-juste",
+  "homepage_url": "https://github.com/Bublex/check-mon-loyer",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",
