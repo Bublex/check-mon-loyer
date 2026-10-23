@@ -50,7 +50,7 @@ const handlers = {
 function render() {
   const listing = state.listing;
   $('listing').hidden = !listing;
-  $('hint').hidden = Boolean(listing || state.result);
+  $('hint').hidden = Boolean(listing || state.result) || !$('unread').hidden;
   if (listing) {
     $('listingTitle').textContent = listing.title || 'Annonce de location';
     $('listingMeta').textContent = state.result?.place?.label || [listing.location?.city, listing.location?.postcode].filter(Boolean).join(' ');
@@ -81,6 +81,15 @@ if (tab?.id !== undefined) {
       state = { ...page.state, loading: false };
       if (state.result && !page.state.loading) render();
       else run();
+    } else {
+      // Site d'annonces, mais rien de reconnu : ce que l'extension lit, à copier pour améliorer la lecture.
+      $('hint').hidden = true;
+      $('unread').hidden = false;
+      $('copyDiagnostic').addEventListener('click', async () => {
+        const diagnostic = await chrome.tabs.sendMessage(tab.id, { type: 'getDiagnostic' });
+        await navigator.clipboard.writeText(JSON.stringify(diagnostic, null, 2));
+        $('copyDiagnostic').textContent = 'Diagnostic copié';
+      });
     }
   } catch {
     // Pas de script sur cette page (site non pris en charge) : saisie manuelle.

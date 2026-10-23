@@ -5,7 +5,7 @@ import '../extension/content/extract.js';
 
 const { parseListing, parseAmount } = globalThis.LoyerExtract;
 
-const page = (over) => ({ url: '', host: '', title: '', h1: '', ogTitle: '', description: '', jsonld: [], nextData: null, body: '', ...over });
+const page = (over) => ({ url: '', host: '', title: '', h1: '', ogTitle: '', description: '', jsonld: [], nextData: null, body: '', maps: [], flags: {}, ...over });
 
 test('Montants', () => {
   assert.equal(parseAmount('1 250'), 1250);
@@ -97,7 +97,40 @@ test('Bien’ici : données structurées schema.org', () => {
   assert.equal(listing.location.postcode, '34000');
 });
 
+test('SeLoger : données schema.org imbriquées, position lue sur l’image de carte, adresse de page inattendue', () => {
+  const listing = parseListing(page({
+    url: 'https://www.seloger.com/annonces/253456789.htm',
+    host: 'seloger.com',
+    title: 'Location appartement 2 pièces Bordeaux | SeLoger',
+    h1: 'Appartement à louer',
+    jsonld: [{ '@context': 'https://schema.org', '@type': 'RealEstateListing', name: 'Appartement 2 pièces', datePosted: '2026-10-20',
+      itemOffered: { '@type': 'Apartment', name: 'Appartement', floorSize: { '@type': 'QuantitativeValue', unitCode: 'MTK', value: '45' }, numberOfRooms: '2' },
+      offers: { '@type': 'Offer', price: '1050', priceCurrency: 'EUR', availability: 'InStock' } }],
+    maps: ['https://api.mapbox.com/styles/v1/seloger/ckxyz/static/-0.5701,44.8414,15/640x360@2x?access_token=pk.test'],
+    body: 'Appartement à louer\n1 050 € CC\nCharges : 60 €\nMeublé\nAscenseur',
+  }));
+  assert.equal(listing.surface, 45);
+  assert.equal(listing.rooms, 2);
+  assert.equal(listing.furnished, true);
+  assert.deepEqual(listing.rent, { amount: 1050, chargesIncluded: true, charges: 60, complement: null, base: null });
+  assert.deepEqual(listing.location, { lat: 44.8414, lon: -0.5701, approximate: true });
+});
+
+test('Bien’ici : meublé ou non, d’après la liste des caractéristiques ou les données de la page', () => {
+  const base = {
+    url: 'https://www.bienici.com/annonce/location/bordeaux/appartement/2pieces/ag330000-1',
+    host: 'bienici.com',
+    h1: 'Location appartement 2 pièces 40 m² Bordeaux (33000)',
+  };
+  assert.equal(parseListing(page({ ...base, body: '890 € par mois charges comprises\nCaractéristiques\nMeublé\nBalcon' })).furnished, true);
+  assert.equal(parseListing(page({ ...base, body: '890 € par mois charges comprises\nCaractéristiques\n• Non meublé' })).furnished, false);
+  assert.equal(parseListing(page({ ...base, body: '890 € par mois charges comprises', flags: { furnished: true } })).furnished, true);
+  assert.equal(parseListing(page({ ...base, body: '890 € par mois charges comprises' })).furnished, null);
+});
+
 test('Pages ignorées : résultats de recherche, vente, parking', () => {
+  const offer = (n) => ({ '@type': 'RealEstateListing', itemOffered: { '@type': 'Apartment', floorSize: { value: 30 + n }, numberOfRooms: 2 }, offers: { '@type': 'Offer', price: 900 + n } });
+  assert.equal(parseListing(page({ url: 'https://www.seloger.com/annonces/locations/bordeaux', host: 'seloger.com', h1: 'Location Bordeaux (33000)', jsonld: [{ '@graph': [1, 2, 3, 4].map(offer) }] })), null);
   assert.equal(parseListing(page({ url: 'https://www.seloger.com/list.htm?types=1', host: 'seloger.com', h1: 'Location appartement Paris', body: '1 200 € 2 pièces 40 m² …' })), null);
   assert.equal(parseListing(page({ url: 'https://www.example-immo.fr/bien/1', host: 'example-immo.fr', h1: 'Vente appartement 3 pièces 70 m² Paris 15e', body: 'Prix : 650 000 €' })), null);
   assert.equal(parseListing(page({ url: 'https://www.example-immo.fr/bien/2', host: 'example-immo.fr', h1: 'Location parking Paris 11e - 120 € / mois' })), null);

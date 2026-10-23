@@ -49,7 +49,53 @@
       jsonld: jsonScripts(doc, 'script[type="application/ld+json"]'),
       nextData: jsonScripts(doc, 'script#__NEXT_DATA__')[0] || null,
       body: String(main?.innerText ?? main?.textContent ?? '').slice(0, 30000),
+      maps: mapSources(doc),
+      flags: scriptFlags(doc),
     };
+  }
+
+  /** Indications laissées dans les données de la page (Bien'ici et autres applications) : « isFurnished »: true… */
+  function scriptFlags(doc) {
+    const flags = {};
+    let budget = 600000;
+    for (const script of doc.querySelectorAll('script:not([src]):not([type="application/ld+json"])')) {
+      const text = script.textContent || '';
+      if (budget <= 0) break;
+      budget -= text.length;
+      const m = text.match(/\\?"(?:isFurnished|furnished|is_furnished|meuble|isMeuble)\\?"\s*:\s*(true|false)/);
+      if (m) { flags.furnished = m[1] === 'true'; break; }
+    }
+    return flags;
+  }
+
+  /** Adresses d'images de carte (Mapbox, Google) et attributs de coordonnées : souvent la seule position publiée. */
+  function mapSources(doc) {
+    const out = [];
+    for (const el of doc.querySelectorAll('img[src*="map"], img[srcset*="map"], source[srcset*="map"], iframe[src*="map"], a[href*="map"], [style*="map"]')) {
+      out.push(el.getAttribute('src') || el.getAttribute('srcset') || el.getAttribute('href') || el.getAttribute('style') || '');
+      if (out.length >= 30) break;
+    }
+    for (const el of doc.querySelectorAll('[data-lat][data-lng], [data-lat][data-lon], [data-latitude][data-longitude]')) {
+      out.push(`latlng:${el.dataset.lat ?? el.dataset.latitude},${el.dataset.lng ?? el.dataset.lon ?? el.dataset.longitude}`);
+      if (out.length >= 40) break;
+    }
+    return out;
+  }
+
+  const inFrance = (lat, lon) => lat > 41 && lat < 51.6 && lon > -5.6 && lon < 10;
+
+  /** Position (approximative) lue dans une image de carte : Mapbox `…/static/lon,lat,zoom/…`, Google `center=lat,lon`. */
+  function coordsFromMaps(sources) {
+    for (const raw of sources || []) {
+      const src = decodeURIComponent(String(raw)).replace(/&amp;/g, '&');
+      let m = src.match(/^latlng:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+      if (m && inFrance(+m[1], +m[2])) return { lat: +m[1], lon: +m[2] };
+      m = src.match(/\/static\/(?:[^/]*\/)?(-?\d{1,3}\.\d{2,}),(-?\d{1,3}\.\d{2,}),\d/) || src.match(/pin-[a-z]+[^(]*\((-?\d{1,3}\.\d{2,}),(-?\d{1,3}\.\d{2,})\)/);
+      if (m && inFrance(+m[2], +m[1])) return { lat: +m[2], lon: +m[1] };
+      m = src.match(/[?&](?:center|markers=[^&]*?)=?(-?\d{1,2}\.\d{2,})(?:,|%2C)(-?\d{1,3}\.\d{2,})/);
+      if (m && inFrance(+m[1], +m[2])) return { lat: +m[1], lon: +m[2] };
+    }
+    return null;
   }
 
   // --- Leboncoin : l'annonce complète est dans les données Next.js ---
@@ -123,6 +169,7 @@
       walk(data, (node) => {
         const types = [].concat(node['@type'] || []).map(String);
         if (!types.some((t) => PLACE_TYPES.test(t))) return;
+        if (node.floorSize != null || node.numberOfRooms != null) out.count = (out.count || 0) + 1;
         const size = node.floorSize?.value ?? node.floorSize;
         if (out.surface == null && toNum(size)) out.surface = toNum(size);
         if (out.rooms == null && toNum(node.numberOfRooms)) out.rooms = toNum(node.numberOfRooms);
@@ -196,6 +243,9 @@
 
     const surface = header.match(/(\d+(?:[.,]\d+)?)\s*m(?:²|2\b|\s*carr)/i) || text.match(/surface(?:\s+habitable)?(?:\s+de)?\s*:?\s*(\d+(?:[.,]\d+)?)\s*m(?:²|2\b)/i);
     if (surface) out.surface = parseAmount(surface[1]);
+    // Dernier recours (pages d'annonce seulement) : la première surface du contenu principal.
+    const loose = String(page.body || '').slice(0, 4000).match(/(\d+(?:[.,]\d+)?)\s*m(?:²|2\b)/i);
+    if (loose && parseAmount(loose[1]) >= 9 && parseAmount(loose[1]) <= 500) out.surfaceLoose = parseAmount(loose[1]);
 
     const rooms = header.match(/(\d+)\s*pi[eè]ces?/i) || header.match(/\b[TF](\d)\b/) || text.match(/(?:nombre de pi[eè]ces|pi[eè]ces)\s*:?\s*(\d+)/i) || text.match(/(\d+)\s*pi[eè]ces?\b/i);
     if (rooms) out.rooms = Number(rooms[1]);
@@ -203,6 +253,10 @@
 
     if (/\bnon[\s-]*meubl[ée]/i.test(header) || /(?:location|logement|appartement|studio|maison|bien|loué|type de location)\s*:?\s+(?:non[\s-]*meubl|vide\b|nue?\b)/i.test(text) || /meubl[ée]e?\s*:\s*non\b/i.test(text)) out.furnished = false;
     else if (/\bmeubl[ée]e?s?\b/i.test(header) || /(?:location|logement|appartement|studio|maison|bien|loué|type de location)\s*:?\s+meubl[ée]/i.test(text) || /meubl[ée]e?\s*:\s*oui\b/i.test(text)) out.furnished = true;
+    // Liste de caractéristiques : une ligne « Meublé » ou « Non meublé » à elle seule (Bien'ici, SeLoger…).
+    else if (/^[\s•·✓-]*non[\s-]*meubl[ée]e?s?\s*$/im.test(page.body || '')) out.furnished = false;
+    else if (/^[\s•·✓-]*(?:logement\s+|bien\s+)?meubl[ée]e?s?\s*$/im.test(page.body || '')) out.furnished = true;
+    else if (typeof page.flags?.furnished === 'boolean') out.furnished = page.flags.furnished;
 
     // Loyer : libellé explicite d'abord, puis montant mensuel du titre.
     const base = amountAfter(text, 'loyer (?:de base|hors complément)');
@@ -214,6 +268,7 @@
     else {
       const m = new RegExp(`${NUM}\\s*€\\s*(?:\\/\\s*mois|par mois|mensuel|cc\\b|c\\.c\\.|hc\\b|charges comprises|hors charges)`, 'i').exec(header) ||
         new RegExp(`${NUM}\\s*€`, 'i').exec(header) ||
+        new RegExp(`${NUM}\\s*€\\s*(?:\\/\\s*mois\\s*|par mois\\s*)?(?:cc\\b|c\\.c\\.|charges comprises|hc\\b|hors charges)`, 'i').exec(text) ||
         new RegExp(`loyer(?: mensuel)?\\s*:?\\s*${NUM}\\s*€`, 'i').exec(text);
       if (m) {
         out.amount = parseAmount(m[1]);
@@ -276,6 +331,11 @@
     return site ? DETAIL[site].test(new URL(page.url).pathname) : null;
   }
 
+  function mapLocation(page) {
+    const c = coordsFromMaps(page.maps);
+    return c ? { ...c, approximate: true } : null;
+  }
+
   /** Maison ou appartement (Bordeaux a une grille pour chacun). */
   function kindOf(text) {
     const s = String(text || '');
@@ -298,7 +358,8 @@
     const pick = (key) => [lbc[key], ld[key], txt[key]].find((v) => v !== undefined && v !== null);
 
     const detail = detailPage(page);
-    if (detail === false) return null;
+    // Une adresse de page inattendue n'exclut pas l'annonce (les sites changent leurs URL) ; une liste de biens, si.
+    if (ld.count > 2 || /\/(list|recherche|search)(\.htm|\/|\?|$)/i.test(new URL(page.url).pathname)) return null;
     const rental = lbc.rental ?? txt.rental;
     if (rental === false) return null;
 
@@ -311,7 +372,7 @@
       title: lbc.title || txt.header.split(' | ')[0] || ld.title || '',
       propertyType: lbc.propertyType || (txt.header.match(/\b(appartement|maison|studio|loft|duplex|chambre)\b/i)?.[1] || ''),
       kind: kindOf(lbc.propertyType || txt.header),
-      surface: pick('surface'),
+      surface: pick('surface') ?? (detail !== false ? txt.surfaceLoose ?? null : null),
       rooms: pick('rooms'),
       furnished: lbc.furnished ?? txt.furnished ?? null,
       construction: lbc.construction || more.construction || txt.construction || null,
@@ -324,7 +385,7 @@
         base: txt.base ?? null,
       },
       announcedCeiling: txt.announcedCeiling ?? null,
-      location: merge(txt.location, ld.location, lbc.location),
+      location: merge(txt.location, mapLocation(page), ld.location, lbc.location),
       roomShare: Boolean(lbc.roomShare || txt.roomShare),
     };
     if (lbc.text) {
@@ -354,5 +415,36 @@
     }
   }
 
-  globalThis.LoyerExtract = { extractListing, parseListing, gatherPage, parseAmount };
+  /** Ce que l'extension lit sur la page, à copier depuis la fenêtre de l'extension quand une annonce n'est pas reconnue. */
+  function diagnose(doc, loc) {
+    const page = gatherPage(doc, loc);
+    const txt = fromText(page);
+    const ld = fromJsonLd(page);
+    const types = [];
+    for (const data of page.jsonld) walk(data, (node) => { if (node['@type']) types.push([].concat(node['@type']).join('/')); });
+    return {
+      url: page.url,
+      title: page.title,
+      h1: page.h1,
+      ogTitle: page.ogTitle,
+      jsonldTypes: types.slice(0, 20),
+      nextData: Boolean(page.nextData),
+      detailUrl: detailPage(page),
+      mapCoords: coordsFromMaps(page.maps),
+      maps: page.maps.slice(0, 5).map((m) => String(m).slice(0, 160)),
+      read: {
+        surface: ld.surface ?? txt.surface ?? txt.surfaceLoose ?? null,
+        rooms: ld.rooms ?? txt.rooms ?? null,
+        amount: ld.amount ?? txt.amount ?? null,
+        chargesIncluded: txt.chargesIncluded ?? null,
+        charges: txt.charges ?? null,
+        location: merge(txt.location, ld.location),
+        rental: txt.rental,
+      },
+      listing: parseListing(page),
+      bodyStart: page.body.slice(0, 1500),
+    };
+  }
+
+  globalThis.LoyerExtract = { extractListing, parseListing, gatherPage, parseAmount, diagnose };
 })();

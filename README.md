@@ -38,7 +38,9 @@ Ailleurs, la pastille indique qu'il n'y a pas d'encadrement des loyers. Les comm
 
 Leboncoin, SeLoger, PAP, Bien'ici, Logic-Immo, Figaro Immobilier, Orpi, Century 21, Laforêt, Foncia, Nexity, Guy Hoquet, ParuVendu, Lodgis, LocService, Studapart.
 
-La lecture prend, dans l'ordre : les données complètes de l'annonce (Leboncoin), les données structurées schema.org, puis le titre et le texte de la page (loyer charges comprises ou hors charges, charges, surface, pièces, meublé, code postal, année de construction, classe énergie, complément de loyer, loyer de référence majoré annoncé). Les pages de résultats de recherche et les annonces de vente, de parking ou de bureaux sont ignorées. Les colocations sont signalées comme non vérifiées.
+La lecture prend, dans l'ordre : les données complètes de l'annonce (Leboncoin), les données structurées schema.org, puis le titre et le texte de la page (loyer charges comprises ou hors charges, charges, surface, pièces, meublé, code postal, année de construction, classe énergie, complément de loyer, loyer de référence majoré annoncé). Quand la page ne publie pas d'adresse, la position est lue sur l'image de carte du quartier (Mapbox, Google) ; le caractère meublé, dans la liste des caractéristiques ou dans les données de la page (`isFurnished`). Les pages de résultats de recherche et les annonces de vente, de parking ou de bureaux sont ignorées. Les colocations sont signalées comme non vérifiées.
+
+Si une annonce n'est pas reconnue, la fenêtre de l'extension propose **Copier le diagnostic** : ce que l'extension lit sur la page (titre, données structurées, position, montants trouvés, début du texte), à transmettre pour adapter la lecture à ce site.
 
 ## Vos données restent sur votre appareil
 

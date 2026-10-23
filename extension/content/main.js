@@ -118,6 +118,7 @@
   // La fenêtre de l'extension affiche l'annonce de l'onglet actif.
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'getPageState') sendResponse({ state });
+    else if (message?.type === 'getDiagnostic') sendResponse(globalThis.LoyerExtract.diagnose(document, location));
     return false;
   });
 

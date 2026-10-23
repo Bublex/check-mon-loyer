@@ -31,6 +31,7 @@ function services(href) {
   const q = url.searchParams.get('q') || '';
   if (url.host === 'data.geopf.fr' && url.pathname === '/geocodage/reverse') {
     const lat = Number(url.searchParams.get('lat'));
+    if (Number(url.searchParams.get('lon')) < 0) return place(-0.5701, 44.8414, '33063', '33000', 'Bordeaux', 'street');
     return lat > 48 ? place(2.3772, 48.8651, '75111', '75011', 'Paris', 'street')
       : lat > 45 ? place(4.85, 45.76, '69383', '69003', 'Lyon', 'street')
         : place(3.88, 43.61, '34172', '34000', 'Montpellier', 'street');
@@ -71,6 +72,8 @@ const PAGES = [
   { url: 'https://www.leboncoin.fr/ad/locations/2981234567', file: 'leboncoin-paris.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 156\u00a0€ de trop par mois' } },
   { url: 'https://www.seloger.com/annonces/locations/appartement/lyon-3eme-69/part-dieu/212345678.htm', file: 'seloger-lyon.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 57\u00a0€ de trop par mois' } },
   { url: 'https://www.pap.fr/annonces/appartement-montpellier-34000-r412345678', file: 'pap-montpellier.html', expect: { title: 'Loyer conforme à l’encadrement', detail: 'Plafond : 720\u00a0€ hors charges' } },
+  { url: 'https://www.seloger.com/annonces/253456789.htm', file: 'seloger-bordeaux.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 13\u00a0€ de trop par mois' } },
+  { url: 'https://www.bienici.com/annonce/location/montpellier/appartement/2pieces/ag340000-1', file: 'bienici-montpellier.html', expect: { title: 'Loyer conforme à l’encadrement', detail: 'Plafond : 720\u00a0€ hors charges' } },
   { url: 'https://www.pap.fr/annonces/appartement-bordeaux-33000-r412345679', file: 'pap-bordeaux.html', expect: { title: 'Loyer au-dessus du plafond', detail: '144\u00a0€ de trop par mois' } },
 ];
 
