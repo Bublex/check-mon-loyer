@@ -1,5 +1,5 @@
 {
-  "name": "loyer-juste",
+  "name": "check-mon-loyer",
   "version": "1.0.0",
   "private": true,
   "description": "Extension Chrome : ce loyer respecte-t-il l'encadrement des loyers ?",
@@ -9,7 +9,7 @@
     "check:live": "node tools/live-check.mjs",
     "e2e": "node tools/e2e.mjs",
     "icons": "node tools/make-icons.mjs",
-    "zip": "cd extension && zip -r -FS ../loyer-juste.zip . -x '.*'"
+    "zip": "cd extension && zip -r -FS ../check-mon-loyer.zip . -x '.*'"
   },
   "engines": {
     "node": ">=22"

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { launch, sleep } from './chrome.mjs';
 import { square, geocoderFeature, makeXlsx, parisRecords, montpellierSheet } from '../tests/helpers.mjs';
 
-const OUT = resolve(process.argv[2] || join(tmpdir(), 'loyer-juste-e2e'));
+const OUT = resolve(process.argv[2] || join(tmpdir(), 'check-mon-loyer-e2e'));
 const fixture = (name) => readFileSync(new URL(`../tests/fixtures/${name}`, import.meta.url));
 
 // --- Services publics simulés (mêmes formats que les vrais) ---
@@ -108,7 +108,7 @@ try {
   await chrome.intercept(swSession, (url) => { requested.push(url); return services(url); });
 
   const pill = (s) => chrome.evaluate(s, `(() => {
-    const root = document.querySelector('[data-loyer-juste]')?.shadowRoot;
+    const root = document.querySelector('[data-check-mon-loyer]')?.shadowRoot;
     if (!root) return null;
     return { title: root.querySelector('.pill-title')?.textContent, detail: root.querySelector('.pill-detail')?.textContent };
   })()`);
@@ -126,20 +126,20 @@ try {
     check(`pastille « ${page.expect.title} »`, () => assert.deepEqual(state, page.expect));
     const prefix = String(n++).padStart(2, '0');
     await chrome.screenshot(s, join(OUT, `${prefix}-pastille.png`));
-    await chrome.evaluate(s, `document.querySelector('[data-loyer-juste]').shadowRoot.querySelector('.pill').click()`);
+    await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.pill').click()`);
     await sleep(400);
     await chrome.screenshot(s, join(OUT, `${prefix}-panneau.png`));
 
     if (page.file === 'seloger-lyon.html') {
       // Époque inconnue : on précise « 1946 à 1970 » dans le formulaire, le plafond devient exact.
       await chrome.evaluate(s, `(() => {
-        const root = document.querySelector('[data-loyer-juste]').shadowRoot;
+        const root = document.querySelector('[data-check-mon-loyer]').shadowRoot;
         root.querySelector('details.edit').open = true;
         root.querySelector('select[name="period"]').value = '1946-1970';
         root.querySelector('form').requestSubmit();
       })()`);
       await sleep(1500);
-      const figures = await chrome.evaluate(s, `document.querySelector('[data-loyer-juste]').shadowRoot.querySelector('.figures')?.textContent`);
+      const figures = await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.figures')?.textContent`);
       check('correction de l’époque : plafond exact', () => assert.match(figures, /14,40\u00a0€\/m² × 38\u00a0m² = 547\u00a0€ hors charges/));
       const after = await pill(s);
       check('pastille après correction : 103 € de trop', () => assert.deepEqual(after, { title: 'Loyer au-dessus du plafond', detail: '103\u00a0€ de trop par mois' }));

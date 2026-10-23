@@ -1,5 +1,5 @@
 // Service worker : reçoit l'annonce lue sur la page (ou saisie dans la fenêtre de l'extension),
-// interroge les services publics de données et renvoie le verdict. Aucun serveur Loyer Juste :
+// interroge les services publics de données et renvoie le verdict. Aucun serveur Check mon loyer :
 // seules la localisation du logement et la recherche de la grille partent vers ces services.
 
 import { checkListing } from './lib/check.js';
@@ -27,7 +27,7 @@ async function check(input, force) {
     if (results.size > 100) results.delete(results.keys().next().value);
     return value;
   } catch (error) {
-    console.warn('[Loyer Juste]', error);
+    console.warn('[Check mon loyer]', error);
     return { error: humanError(error) };
   }
 }

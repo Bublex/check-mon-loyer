@@ -1,4 +1,4 @@
-// Interface de Loyer Juste : pastille flottante + panneau (Shadow DOM fermé), et rendu du verdict
+// Interface de Check mon loyer : pastille flottante + panneau (Shadow DOM fermé), et rendu du verdict
 // réutilisé par la fenêtre de l'extension (popup). Tout le contenu est inséré en texte, jamais en HTML.
 (() => {
   'use strict';
@@ -129,7 +129,7 @@
       case 'nolocation':
         return { tone: 'info', title: 'Adresse à préciser', detail: 'Pour vérifier l’encadrement' };
       case 'roomshare':
-        return { tone: 'none', title: 'Colocation', detail: 'Non vérifiée par Loyer Juste' };
+        return { tone: 'none', title: 'Colocation', detail: 'Non vérifiée par Check mon loyer' };
       default:
         return { tone: 'info', title: 'Encadrement des loyers', detail: '' };
     }
@@ -173,7 +173,7 @@
         return ['info', 'help', 'Informations manquantes', `Indiquez ${joinFr((v.missing || []).map((k) => MISSING[k]))} pour calculer le plafond.`];
       case 'nosource':
         return ['info', 'help', `Loyer encadré à ${r.territory.name}`,
-          `${r.territory.partial ? 'L’encadrement s’applique à tout ou partie de cette commune. ' : ''}Loyer Juste ne calcule pas encore le plafond de ce territoire : vérifiez-le sur le simulateur officiel.`];
+          `${r.territory.partial ? 'L’encadrement s’applique à tout ou partie de cette commune. ' : ''}Check mon loyer ne calcule pas encore le plafond de ce territoire : vérifiez-le sur le simulateur officiel.`];
       case 'nodata':
         return ['info', 'help', 'Grille introuvable', 'Le service de données ne renvoie pas de loyer de référence pour cette adresse. Vérifiez-la, ou consultez le simulateur officiel.'];
       case 'notcovered':
@@ -182,7 +182,7 @@
       case 'nolocation':
         return ['info', 'help', 'Adresse introuvable', 'Indiquez l’adresse ou la ville du logement ci-dessous.'];
       case 'roomshare':
-        return ['none', 'home', 'Colocation', 'Les baux de colocation et les chambres ne sont pas encore vérifiés par Loyer Juste.'];
+        return ['none', 'home', 'Colocation', 'Les baux de colocation et les chambres ne sont pas encore vérifiés par Check mon loyer.'];
       default:
         return ['info', 'help', 'Encadrement des loyers', ''];
     }
@@ -314,7 +314,7 @@
 
   function mountPanel({ position = 'right', handlers = {} } = {}) {
     const host = document.createElement('div');
-    host.setAttribute('data-loyer-juste', '');
+    host.setAttribute('data-check-mon-loyer', '');
     const root = host.attachShadow({ mode: 'closed' });
     root.append(h('style', null, CSS));
     const ui = { open: false };
@@ -323,9 +323,9 @@
     const pill = h('button', { class: 'pill', type: 'button', 'aria-expanded': 'false' });
     const bodyEl = h('div', { class: 'body' });
     const headEl = h('div', { class: 'listing' });
-    const card = h('section', { class: 'card', role: 'dialog', 'aria-label': 'Loyer Juste : encadrement des loyers', hidden: true },
+    const card = h('section', { class: 'card', role: 'dialog', 'aria-label': 'Check mon loyer : encadrement des loyers', hidden: true },
       h('header', { class: 'card-head' },
-        h('div', { class: 'brand' }, h('span', { class: 'brand-mark' }, icon('home', 14)), 'Loyer Juste'),
+        h('div', { class: 'brand' }, h('span', { class: 'brand-mark' }, icon('home', 14)), 'Check mon loyer'),
         h('div', { class: 'head-actions' },
           h('button', { class: 'icon-btn', type: 'button', title: 'Actualiser', 'aria-label': 'Vérifier à nouveau', onclick: () => handlers.onRefresh?.() }, icon('refresh', 16)),
           h('button', { class: 'icon-btn', type: 'button', title: 'Réduire', 'aria-label': 'Réduire le panneau', onclick: () => setOpen(false) }, icon('minus', 16)))),
@@ -355,7 +355,7 @@
       pill.replaceChildren(
         h('span', { class: 'pill-icon' }, s.busy ? h('span', { class: 'spinner' }) : icon(pillIcon, 15)),
         h('span', { class: 'pill-text' }, h('span', { class: 'pill-title' }, s.title), s.detail ? h('span', { class: 'pill-detail' }, s.detail) : null));
-      pill.setAttribute('aria-label', `Loyer Juste : ${s.title}${s.detail ? `, ${s.detail}` : ''}`);
+      pill.setAttribute('aria-label', `Check mon loyer : ${s.title}${s.detail ? `, ${s.detail}` : ''}`);
       const listing = last.listing || {};
       const place = last.result?.place?.label || [listing.location?.city, listing.location?.postcode].filter(Boolean).join(' ');
       headEl.replaceChildren(

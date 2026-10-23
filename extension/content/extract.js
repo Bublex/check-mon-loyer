@@ -340,7 +340,7 @@
     try {
       return parseListing(gatherPage(doc, loc));
     } catch (error) {
-      console.warn('[Loyer Juste] lecture de l’annonce', error);
+      console.warn('[Check mon loyer] lecture de l’annonce', error);
       return null;
     }
   }

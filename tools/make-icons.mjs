@@ -1,4 +1,4 @@
-// Génère les icônes PNG de Loyer Juste (16, 32, 48, 128 px) sans dépendance :
+// Génère les icônes PNG de Check mon loyer (16, 32, 48, 128 px) sans dépendance :
 // rastérisation par sur-échantillonnage + encodeur PNG minimal (zlib de Node).
 // Usage : node tools/make-icons.mjs
 import { deflateSync } from 'node:zlib';

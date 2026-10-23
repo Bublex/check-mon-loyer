@@ -47,7 +47,7 @@ function connect(proc) {
  */
 export async function launch({ chromePath = process.env.CHROME_PATH, width = 1400, height = 950, patch } = {}) {
   if (!chromePath) throw new Error('Définissez CHROME_PATH (par ex. /Applications/Google Chrome.app/Contents/MacOS/Google Chrome).');
-  const work = join(tmpdir(), `loyer-juste-chrome-${Date.now()}`);
+  const work = join(tmpdir(), `check-mon-loyer-chrome-${Date.now()}`);
   const ext = join(work, 'extension');
   cpSync(fileURLToPath(new URL('../extension', import.meta.url)), ext, { recursive: true });
   patch?.(ext);

@@ -1,5 +1,5 @@
 // Point d'entrée sur les sites d'annonces : lit l'annonce, demande la vérification au service worker
-// et affiche la pastille Loyer Juste. Les corrections saisies dans le panneau relancent le calcul.
+// et affiche la pastille Check mon loyer. Les corrections saisies dans le panneau relancent le calcul.
 (() => {
   'use strict';
 

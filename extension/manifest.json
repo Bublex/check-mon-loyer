@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Loyer Juste : ce loyer respecte-t-il l'encadrement ?",
-  "short_name": "Loyer Juste",
+  "name": "Check mon loyer : ce loyer respecte-t-il l'encadrement ?",
+  "short_name": "Check mon loyer",
   "version": "1.0.0",
   "description": "Sur une annonce de location, voyez si le loyer dépasse le plafond légal de l'encadrement des loyers, et de combien.",
   "homepage_url": "https://github.com/Bublex/check-mon-loyer",
@@ -13,7 +13,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Loyer Juste",
+    "default_title": "Check mon loyer",
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

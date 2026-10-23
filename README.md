@@ -1,4 +1,4 @@
-# Loyer Juste : ce loyer respecte-t-il l'encadrement ?
+# Check mon loyer : ce loyer respecte-t-il l'encadrement ?
 
 Extension Chrome. Sur une annonce de location (Leboncoin, SeLoger, PAP, Bien'ici…), une pastille indique en quelques secondes si le loyer dépasse le plafond légal de l'encadrement des loyers, et de combien. Un clic ouvre le détail du calcul et un formulaire pour corriger ou compléter l'annonce.
 
@@ -13,7 +13,7 @@ Extension Chrome. Sur une annonce de location (Leboncoin, SeLoger, PAP, Bien'ici
 2. Cliquez sur **Charger l'extension non empaquetée** et choisissez le dossier `extension/` de ce dépôt.
 3. Ouvrez une annonce de location à Paris, Lyon, Villeurbanne ou Montpellier.
 
-Pour une archive à partager : `npm run zip` produit `loyer-juste.zip`.
+Pour une archive à partager : `npm run zip` produit `check-mon-loyer.zip`.
 
 ## Territoires
 
@@ -42,7 +42,7 @@ La lecture prend, dans l'ordre : les données complètes de l'annonce (Leboncoin
 
 ## Vos données restent sur votre appareil
 
-- Pas de compte, pas de serveur Loyer Juste, aucune statistique.
+- Pas de compte, pas de serveur Check mon loyer, aucune statistique.
 - Le loyer, la surface et le reste de l'annonce ne quittent jamais le navigateur : le calcul est fait localement.
 - Seule la **localisation du logement** part vers des services publics : la Géoplateforme de l'IGN (géocodage de l'adresse ou du quartier, îlots IRIS), puis le service du territoire concerné (Ville de Paris, Métropole de Lyon, Montpellier Méditerranée Métropole) et le catalogue data.gouv.fr. Les requêtes partent sans cookies et sans en-tête `Referer` : ces services ne voient pas l'annonce consultée.
 - Les résultats sont gardés 15 minutes en mémoire, les grilles 24 heures.
