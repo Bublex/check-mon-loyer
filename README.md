@@ -10,7 +10,7 @@ Extension Chrome. Sur une annonce de location (Leboncoin, SeLoger, PAP, Bien'ici
 ## Installation (mode développeur)
 
 1. Ouvrez `chrome://extensions` et activez le **Mode développeur** (en haut à droite).
-2. Cliquez sur **Charger l'extension non empaquetée** et choisissez le dossier `extension/` de ce dépôt.
+2. Cliquez sur **Charger l'extension non empaquetée** et choisissez le dossier `extension/` de ce dépôt (pas la racine du dépôt : Chrome répondrait « Manifest file is missing or unreadable »).
 3. Ouvrez une annonce de location à Paris, Lyon, Villeurbanne ou Montpellier.
 
 Pour une archive à partager : `npm run zip` produit `check-mon-loyer.zip`.
