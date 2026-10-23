@@ -1,0 +1,17 @@
+{
+  "name": "loyer-juste",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Extension Chrome : ce loyer respecte-t-il l'encadrement des loyers ?",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check:live": "node tools/live-check.mjs",
+    "e2e": "node tools/e2e.mjs",
+    "icons": "node tools/make-icons.mjs",
+    "zip": "cd extension && zip -r -FS ../loyer-juste.zip . -x '.*'"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
