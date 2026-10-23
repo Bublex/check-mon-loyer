@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "Loyer Juste : ce loyer respecte-t-il l'encadrement ?",
+  "short_name": "Loyer Juste",
+  "version": "1.0.0",
+  "description": "Sur une annonce de location, voyez si le loyer dépasse le plafond légal de l'encadrement des loyers, et de combien.",
+  "homepage_url": "https://github.com/Bublex/biblib/tree/main/loyer-juste",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Loyer Juste",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://data.geopf.fr/*",
+    "https://opendata.paris.fr/*",
+    "https://www.data.gouv.fr/*",
+    "https://data.grandlyon.com/*",
+    "https://data.montpellier3m.fr/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.leboncoin.fr/*",
+        "https://www.seloger.com/*",
+        "https://www.pap.fr/*",
+        "https://www.bienici.com/*",
+        "https://www.logic-immo.com/*",
+        "https://immobilier.lefigaro.fr/*",
+        "https://www.orpi.com/*",
+        "https://www.century21.fr/*",
+        "https://www.laforet.com/*",
+        "https://fr.foncia.com/*",
+        "https://www.nexity.fr/*",
+        "https://www.guy-hoquet.com/*",
+        "https://www.paruvendu.fr/*",
+        "https://www.lodgis.com/*",
+        "https://www.locservice.fr/*",
+        "https://www.studapart.com/*"
+      ],
+      "js": ["content/extract.js", "content/ui.js", "content/main.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

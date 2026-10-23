@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Loyer Juste</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="popup-head">
+      <div class="brand"><img src="../icons/icon32.png" alt="" width="22" height="22"> Loyer Juste</div>
+      <button type="button" class="link" id="showEverywhere" hidden>Réafficher sur tous les sites</button>
+    </header>
+    <div class="listing" id="listing" hidden>
+      <div class="listing-title" id="listingTitle"></div>
+      <div class="listing-meta" id="listingMeta"></div>
+    </div>
+    <p class="hint" id="hint">Ouvrez une annonce de location sur Leboncoin, SeLoger, PAP, Bien’ici… ou décrivez le logement ci-dessous.</p>
+    <div class="body" id="result"></div>
+    <footer class="popup-foot">Plafonds calculés avec les données publiques de Paris, de la Métropole de Lyon et de Montpellier.</footer>
+  </div>
+  <script src="../content/ui.js"></script>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
