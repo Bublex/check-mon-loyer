@@ -199,6 +199,28 @@ test('Bordeaux : sans îlots, la carte seule ; Lille : encadré sans calcul ; M�
   assert.equal(merignac.place.city, 'Mérignac');
 });
 
+test('Adresse saisie : retenue si elle est trouvée, signalée sinon (sans calcul silencieux sur la ville)', async () => {
+  mock = mockFetch([
+    [/geocodage\/search.*Oberkampf/, { features: [geocoderFeature({ lon: 2.3705, lat: 48.8665, citycode: '75111', postcode: '75011', city: 'Paris', label: '12 Rue Oberkampf 75011 Paris' })] }],
+    // Adresse inconnue : le géocodeur ne renvoie que la ville.
+    [/geocodage\/search.*imaginaire/, { features: [geocoderFeature({ lon: 2.38, lat: 48.86, type: 'municipality', citycode: '75111', postcode: '75011', city: 'Paris' })] }],
+    [/geocodage\/search.*75011/, { features: [geocoderFeature({ lon: 2.38, lat: 48.86, type: 'municipality', citycode: '75111', postcode: '75011', city: 'Paris' })] }],
+    ['https://opendata.paris.fr/', { results: parisRecords('Folie-Méricourt', 2026) }],
+  ]);
+  const found = await checkListing({ listing: listing(), location: { address: '12 rue Oberkampf', postcode: '75011', city: 'Paris' } }, { today: TODAY });
+  assert.equal(found.place.source, 'address');
+  assert.equal(found.place.precision, 'housenumber');
+  assert.equal(found.place.approximate, false);
+  assert.equal(found.place.addressNotFound, null);
+  const missing = await checkListing({ listing: listing(), location: { address: '3 rue imaginaire', postcode: '75011', city: 'Paris' } }, { today: TODAY });
+  assert.equal(missing.place.addressNotFound, '3 rue imaginaire');
+  assert.equal(missing.place.source, 'area');
+  assert.equal(missing.place.approximate, true);
+  const nowhere = await checkListing({ listing: listing(), location: { address: '3 rue imaginaire' } });
+  assert.equal(nowhere.status, 'nolocation');
+  assert.equal(nowhere.addressNotFound, '3 rue imaginaire');
+});
+
 test('Sans localisation', async () => {
   assert.equal((await checkListing({ listing: listing(), location: {} })).status, 'nolocation');
 });

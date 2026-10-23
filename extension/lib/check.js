@@ -12,6 +12,9 @@ const SOURCES = { paris: parisRows, lyon: lyonRows, montpellier: montpellierRows
 
 // Coordonnées fournies par un site d'annonces sans adresse exacte (pastille « quartier » sur la carte).
 const APPROXIMATE_COORDS_RADIUS = 500;
+// Résultats de géocodage qui valent une adresse : numéro, rue, lieu-dit (pas une commune entière).
+const ADDRESS_TYPES = new Set(['housenumber', 'street', 'locality']);
+const MIN_ADDRESS_SCORE = 0.5;
 
 /**
  * Où est le logement ? Par ordre de confiance : adresse saisie ou publiée, coordonnées de l'annonce,
@@ -22,7 +25,11 @@ export async function locate(loc, { signal } = {}) {
   const where = [loc.district, loc.postcode, loc.city].filter(Boolean).join(' ');
   if (loc.address) {
     const place = await geocode([loc.address, loc.postcode, loc.city].filter(Boolean).join(' '), { signal });
-    if (place) return { ...place, source: 'address' };
+    // Une adresse n'est retenue que si le géocodeur trouve au moins la rue, avec une confiance suffisante :
+    // sinon on le dit, plutôt que de calculer en silence sur la ville entière.
+    if (place && ADDRESS_TYPES.has(place.type) && (place.score == null || place.score >= MIN_ADDRESS_SCORE)) return { ...place, source: 'address' };
+    const fallback = await locate({ ...loc, address: null }, { signal });
+    return fallback ? { ...fallback, addressNotFound: loc.address } : null;
   }
   if (Number.isFinite(loc.lat) && Number.isFinite(loc.lon)) {
     const place = await reverse(loc.lat, loc.lon, { signal });
@@ -52,8 +59,17 @@ export async function locate(loc, { signal } = {}) {
  */
 export async function checkListing(input, { signal, today } = {}) {
   const place = await locate(input.location || {}, { signal });
-  if (!place) return { status: 'nolocation' };
-  const placeInfo = { label: place.label, city: place.city, postcode: place.postcode, approximate: place.radius > 0, radius: place.radius };
+  if (!place) return { status: 'nolocation', addressNotFound: input.location?.address || null };
+  const placeInfo = {
+    label: place.label,
+    city: place.city,
+    postcode: place.postcode,
+    approximate: place.radius > 0,
+    radius: place.radius,
+    source: place.source,
+    precision: place.source === 'address' ? place.type : null,
+    addressNotFound: place.addressNotFound || null,
+  };
   const territory = findTerritory(place.citycode);
   if (!territory) return { status: 'notcovered', place: placeInfo };
   const territoryInfo = { id: territory.id, name: territory.name, officialUrl: territory.officialUrl, partial: Boolean(territory.partial) };

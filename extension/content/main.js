@@ -18,10 +18,8 @@
   /** Données envoyées au calcul : l'annonce, corrigée par ce que l'utilisateur a saisi. */
   function inputsFor(listing, edits = {}) {
     const where = { ...listing.location };
-    if (edits.address) {
-      // Adresse saisie : elle prime sur la position approximative de l'annonce.
-      Object.assign(where, { address: edits.address, lat: undefined, lon: undefined });
-    }
+    // Adresse saisie : elle prime sur la position approximative de l'annonce, qui reste le repli si elle est introuvable.
+    if (edits.address) where.address = edits.address;
     const rent = { ...listing.rent, ...(edits.rent || {}) };
     if (edits.rent && edits.rent.amount !== listing.rent.amount) rent.base = null;
     return {

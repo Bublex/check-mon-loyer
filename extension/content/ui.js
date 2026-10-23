@@ -180,7 +180,9 @@
         return ['none', 'home', 'Pas d’encadrement des loyers ici',
           `${r.place?.city ? `${r.place.city} n’applique` : 'Cette commune n’applique'} pas l’encadrement du niveau des loyers. En zone tendue, le loyer ne peut en principe pas augmenter entre deux locataires.`];
       case 'nolocation':
-        return ['info', 'help', 'Adresse introuvable', 'Indiquez l’adresse ou la ville du logement ci-dessous.'];
+        return ['info', 'help', 'Adresse introuvable', r.addressNotFound
+          ? `« ${r.addressNotFound} » n’a pas été trouvée dans la Base Adresse Nationale. Vérifiez l’orthographe, ajoutez le code postal et la ville.`
+          : 'Indiquez l’adresse ou la ville du logement ci-dessous.'];
       case 'roomshare':
         return ['none', 'home', 'Colocation', 'Les baux de colocation et les chambres ne sont pas encore vérifiés par Check mon loyer.'];
       default:
@@ -203,7 +205,14 @@
         h('div', { class: 'verdict-text' }, h('div', { class: 'verdict-title' }, title), text ? h('p', null, text) : null)),
       lines.length ? h('dl', { class: 'figures' }, lines.flatMap(([k, val]) => [h('dt', null, k), h('dd', null, val)])) : null,
     ];
-    if (v.spread?.includes('address') && r.status !== 'depends') {
+    // Ce que l'adresse saisie a donné : l'adresse retenue, ou l'échec du géocodage.
+    if (r.place?.addressNotFound) {
+      out.push(h('p', { class: 'note warn' }, `Adresse « ${r.place.addressNotFound} » introuvable : le calcul porte sur ${r.place.approximate ? 'le quartier de l’annonce' : 'la position de l’annonce'}. Vérifiez l’orthographe ou ajoutez le code postal.`));
+    } else if (r.place?.source === 'address') {
+      const precision = r.place.precision === 'housenumber' ? '' : ' (rue trouvée, numéro non reconnu)';
+      out.push(h('p', { class: 'note' }, `Adresse retenue : ${r.place.label}${precision}.`));
+    }
+    if (v.spread?.includes('address') && r.status !== 'depends' && !r.place?.addressNotFound) {
       out.push(h('p', { class: 'note' }, 'L’annonce ne donne pas l’adresse exacte : le plafond couvre les secteurs voisins. Indiquez l’adresse pour l’affiner.'));
     }
     if (v.complementForbidden) out.push(h('p', { class: 'note warn' }, 'Un complément de loyer est demandé alors que le logement est classé F ou G : c’est interdit.'));

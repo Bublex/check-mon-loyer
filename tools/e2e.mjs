@@ -17,7 +17,7 @@ const fixture = (name) => readFileSync(new URL(`../tests/fixtures/${name}`, impo
 // --- Services publics simulés (mêmes formats que les vrais) ---
 
 const json = (data) => ({ body: JSON.stringify(data), type: 'application/json' });
-const place = (lon, lat, citycode, postcode, city, type) => json({ features: [geocoderFeature({ lon, lat, citycode, postcode, city, type })] });
+const place = (lon, lat, citycode, postcode, city, type, label) => json({ features: [geocoderFeature({ lon, lat, citycode, postcode, city, type, label })] });
 
 const lyonValeurs = {
   2: {
@@ -40,8 +40,9 @@ function services(href) {
     if (/lyon/i.test(q)) return place(4.85, 45.76, '69383', '69003', 'Lyon 3e Arrondissement', 'municipality');
     if (/montpellier/i.test(q)) return place(3.88, 43.61, '34172', '34000', 'Montpellier', 'municipality');
     if (/bordeaux/i.test(q)) return place(-0.57, 44.84, '33063', '33000', 'Bordeaux', 'municipality');
+    if (/lib[ée]ration/i.test(q)) return place(-0.6436, 44.8386, '33281', '33700', 'Mérignac', 'housenumber');
     if (/m[ée]rignac/i.test(q)) return place(-0.64, 44.84, '33281', '33700', 'Mérignac', 'municipality');
-    if (/oberkampf/i.test(q)) return place(2.3705, 48.8665, '75111', '75011', 'Paris', 'housenumber');
+    if (/oberkampf/i.test(q)) return place(2.3705, 48.8665, '75111', '75011', 'Paris', 'housenumber', '12 Rue Oberkampf 75011 Paris');
     return json({ features: [] });
   }
   if (url.host === 'data.geopf.fr' && url.pathname === '/wfs/ows') {
@@ -133,6 +134,28 @@ try {
     await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.pill').click()`);
     await sleep(400);
     await chrome.screenshot(s, join(OUT, `${prefix}-panneau.png`));
+
+    if (page.file === 'leboncoin-paris.html') {
+      // Adresse saisie dans le formulaire : inconnue (signalée), puis exacte (plafond du seul quartier concerné).
+      const submitAddress = (address) => chrome.evaluate(s, `(() => {
+        const root = document.querySelector('[data-loyer-juste], [data-check-mon-loyer]').shadowRoot;
+        root.querySelector('details.edit').open = true;
+        root.querySelector('input[name="address"]').value = ${JSON.stringify(address)};
+        root.querySelector('form').requestSubmit();
+      })()`);
+      const notes = () => chrome.evaluate(s, `[...document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelectorAll('.note')].map((n) => n.textContent).join(' | ')`);
+      await submitAddress('3 rue qui n’existe pas');
+      await sleep(1500);
+      const unknownNotes = await notes();
+      check('adresse inconnue signalée', () => assert.match(unknownNotes, /Adresse « 3 rue qui n’existe pas » introuvable : le calcul porte sur le quartier de l’annonce/));
+      await submitAddress('12 rue Oberkampf');
+      await sleep(1500);
+      const exact = await pill(s);
+      check('adresse exacte : un seul quartier, dépassement exact', () => assert.deepEqual(exact, { title: 'Loyer au-dessus du plafond', detail: '156\u00a0€ de trop par mois' }));
+      const exactNotes = await notes();
+      check('adresse retenue affichée', () => assert.match(exactNotes, /Adresse retenue : 12 Rue Oberkampf 75011 Paris\./));
+      await chrome.screenshot(s, join(OUT, `${prefix}-panneau-adresse.png`));
+    }
 
     if (page.file === 'seloger-lyon.html') {
       // Époque inconnue : on précise « 1946 à 1970 » dans le formulaire, le plafond devient exact.

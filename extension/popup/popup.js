@@ -29,7 +29,7 @@ const handlers = {
   onRefresh: () => run(true),
   onEdit(edits) {
     const location = { ...state.inputs.location };
-    if (edits.address) Object.assign(location, { address: edits.address, lat: undefined, lon: undefined });
+    if (edits.address) location.address = edits.address;
     state.inputs = {
       ...state.inputs,
       location,
