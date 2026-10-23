@@ -40,9 +40,9 @@ export const TERRITORIES = [
   {
     id: 'bordeaux',
     name: 'Bordeaux',
-    source: null,
+    source: 'bordeaux',
     communes: ['33063'],
-    officialUrl: 'https://www.bordeaux.fr/lencadrement-des-loyers-a-bordeaux',
+    officialUrl: 'https://www.gironde.gouv.fr/Actions-de-l-Etat/Amenagement-du-territoire-construction-logement/Habitat-logement/Encadrement-des-loyers-a-Bordeaux/Dispositif-d-encadrement-des-loyers',
   },
   {
     id: 'plaine-commune',

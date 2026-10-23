@@ -59,6 +59,7 @@
   const SPREAD = {
     period: 'l’époque de construction',
     furnished: 'le type de location (vide ou meublée)',
+    kind: 'le type de logement (appartement ou maison)',
     address: 'l’adresse exacte',
     zone: 'le secteur',
     rooms: 'le nombre de pièces',
@@ -259,8 +260,9 @@
         field('Surface habitable', h('input', { name: 'surface', type: 'number', min: '1', step: '0.1', inputmode: 'decimal', placeholder: 'm²', value: listing.surface ?? '' })),
         field('Pièces', select('rooms', [['', '?'], [1, '1'], [2, '2'], [3, '3'], [4, '4 et plus']], listing.rooms == null ? '' : Math.min(Math.max(listing.rooms, 1), 4)))),
       h('div', { class: 'row' },
-        field('Location', select('furnished', [['', 'Je ne sais pas'], ['false', 'Vide'], ['true', 'Meublée']], listing.furnished == null ? '' : String(listing.furnished))),
-        field('Construction', select('period', periodOptions, choice))),
+        field('Logement', select('kind', [['', 'Je ne sais pas'], ['appartement', 'Appartement'], ['maison', 'Maison']], listing.kind || '')),
+        field('Location', select('furnished', [['', 'Je ne sais pas'], ['false', 'Vide'], ['true', 'Meublée']], listing.furnished == null ? '' : String(listing.furnished)))),
+      field('Construction', select('period', periodOptions, choice)),
       h('div', { class: 'row' },
         field('Loyer mensuel', h('input', { name: 'amount', type: 'number', min: '0', step: '1', inputmode: 'decimal', placeholder: '€', value: rent.amount ?? '' })),
         field('Affiché', select('chargesIncluded', [['true', 'Charges comprises'], ['false', 'Hors charges']], rent.chargesIncluded === false ? 'false' : 'true'))),
@@ -282,6 +284,7 @@
         surface: num('surface'),
         rooms: num('rooms'),
         furnished: data.get('furnished') === '' ? null : data.get('furnished') === 'true',
+        kind: String(data.get('kind') || '') || null,
         construction: period === 'inferred' ? construction : constructionFromChoice(period),
         rent: { amount: num('amount'), chargesIncluded: data.get('chargesIncluded') !== 'false', charges: num('charges'), complement: num('complement') },
       });

@@ -44,6 +44,7 @@ function services(href) {
     return json({ features: [] });
   }
   if (url.host === 'data.geopf.fr' && url.pathname === '/wfs/ows') {
+    if (/33063/.test(url.searchParams.get('CQL_FILTER'))) return json({ features: [{ properties: { code_iris: '330630102', nom_iris: 'Saint-Pierre' }, geometry: square(-0.57, 44.84) }] });
     return json({ features: [{ properties: { code_iris: '693830101', nom_iris: 'Part-Dieu' }, geometry: square(4.85, 45.76) }] });
   }
   if (url.host === 'opendata.paris.fr') {
@@ -70,7 +71,7 @@ const PAGES = [
   { url: 'https://www.leboncoin.fr/ad/locations/2981234567', file: 'leboncoin-paris.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 156\u00a0€ de trop par mois' } },
   { url: 'https://www.seloger.com/annonces/locations/appartement/lyon-3eme-69/part-dieu/212345678.htm', file: 'seloger-lyon.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 57\u00a0€ de trop par mois' } },
   { url: 'https://www.pap.fr/annonces/appartement-montpellier-34000-r412345678', file: 'pap-montpellier.html', expect: { title: 'Loyer conforme à l’encadrement', detail: 'Plafond : 720\u00a0€ hors charges' } },
-  { url: 'https://www.pap.fr/annonces/appartement-bordeaux-33000-r412345679', file: 'pap-bordeaux.html', expect: { title: 'Loyer encadré à Bordeaux', detail: 'Plafond à vérifier sur le simulateur officiel' } },
+  { url: 'https://www.pap.fr/annonces/appartement-bordeaux-33000-r412345679', file: 'pap-bordeaux.html', expect: { title: 'Loyer au-dessus du plafond', detail: '144\u00a0€ de trop par mois' } },
 ];
 
 // --- Lancement ---

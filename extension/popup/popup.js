@@ -38,6 +38,7 @@ const handlers = {
         surface: edits.surface,
         rooms: edits.rooms,
         furnished: edits.furnished,
+        kind: edits.kind,
         construction: edits.construction,
         rent: { ...state.inputs.listing.rent, ...edits.rent, base: null },
       },

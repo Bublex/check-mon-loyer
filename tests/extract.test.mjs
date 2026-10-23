@@ -37,6 +37,7 @@ test('Leboncoin : données de l’annonce (Next.js) et description', () => {
     } } } },
   }));
   assert.equal(listing.site, 'leboncoin');
+  assert.equal(listing.kind, 'appartement');
   assert.equal(listing.surface, 42);
   assert.equal(listing.rooms, 2);
   assert.equal(listing.furnished, false);
@@ -78,6 +79,7 @@ test('PAP : séparateur de milliers en point, ville et code postal', () => {
   assert.equal(listing.location.city, 'Villeurbanne');
   assert.equal(listing.location.postcode, '69100');
   assert.equal(listing.dpe, 'C');
+  assert.equal(listing.kind, 'appartement');
 });
 
 test('Bien’ici : données structurées schema.org', () => {

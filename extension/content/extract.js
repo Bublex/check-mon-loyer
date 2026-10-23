@@ -276,6 +276,14 @@
     return site ? DETAIL[site].test(new URL(page.url).pathname) : null;
   }
 
+  /** Maison ou appartement (Bordeaux a une grille pour chacun). */
+  function kindOf(text) {
+    const s = String(text || '');
+    if (/\b(maison|villa|pavillon)\b/i.test(s)) return 'maison';
+    if (/\b(appartement|studio|loft|duplex|triplex)\b/i.test(s)) return 'appartement';
+    return null;
+  }
+
   /** Fusion d'objets où une valeur vide (null, undefined, '') ne remplace pas une valeur connue. */
   function merge(...objects) {
     const out = {};
@@ -302,6 +310,7 @@
       url: page.url,
       title: lbc.title || txt.header.split(' | ')[0] || ld.title || '',
       propertyType: lbc.propertyType || (txt.header.match(/\b(appartement|maison|studio|loft|duplex|chambre)\b/i)?.[1] || ''),
+      kind: kindOf(lbc.propertyType || txt.header),
       surface: pick('surface'),
       rooms: pick('rooms'),
       furnished: lbc.furnished ?? txt.furnished ?? null,

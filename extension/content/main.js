@@ -29,6 +29,7 @@
         surface: edits.surface !== undefined ? edits.surface : listing.surface,
         rooms: edits.rooms !== undefined ? edits.rooms : listing.rooms,
         furnished: edits.furnished !== undefined ? edits.furnished : listing.furnished,
+        kind: edits.kind !== undefined ? edits.kind : listing.kind,
         construction: edits.construction !== undefined ? edits.construction : listing.construction,
         rent,
         dpe: listing.dpe,

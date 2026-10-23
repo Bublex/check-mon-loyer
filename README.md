@@ -11,13 +11,13 @@ Extension Chrome. Sur une annonce de location (Leboncoin, SeLoger, PAP, Bien'ici
 
 1. Ouvrez `chrome://extensions` et activez le **Mode développeur** (en haut à droite).
 2. Cliquez sur **Charger l'extension non empaquetée** et choisissez le dossier `extension/` de ce dépôt (pas la racine du dépôt : Chrome répondrait « Manifest file is missing or unreadable »).
-3. Ouvrez une annonce de location à Paris, Lyon, Villeurbanne ou Montpellier.
+3. Ouvrez une annonce de location à Paris, Lyon, Villeurbanne, Montpellier ou Bordeaux.
 
 Pour une archive à partager : `npm run zip` produit `check-mon-loyer.zip`.
 
 ## Territoires
 
-L'encadrement du niveau des loyers s'applique dans neuf territoires. Pour trois d'entre eux, les loyers de référence sont publiés dans un format exploitable : l'extension calcule le plafond. Pour les autres, elle signale que le loyer est encadré et renvoie vers le simulateur officiel.
+L'encadrement du niveau des loyers s'applique dans neuf territoires. Pour quatre d'entre eux, l'extension calcule le plafond. Pour les autres, elle signale que le loyer est encadré et renvoie vers le simulateur officiel.
 
 | Territoire | Plafond calculé | Source |
 |---|---|---|
@@ -25,7 +25,7 @@ L'encadrement du niveau des loyers s'applique dans neuf territoires. Pour trois 
 | Lyon et Villeurbanne | Oui | Métropole de Lyon, couche WFS annuelle par IRIS (nom de couche lu sur data.gouv.fr) |
 | Montpellier | Oui | Montpellier Méditerranée Métropole : zones de l'observatoire par IRIS + classeur de la grille |
 | Lille, Hellemmes, Lomme | Non | Lien vers le simulateur de la Ville |
-| Bordeaux | Non | Lien vers la page de la Ville |
+| Bordeaux | Oui | Grille de l'arrêté préfectoral (tableur de la préfecture de la Gironde, appartements et maisons) et zones de la carte officielle, intégrées à l'extension (voir ci-dessous) |
 | Plaine Commune, Est Ensemble | Non | Lien vers le simulateur de la DRIHL |
 | Pays basque (24 communes) | Non | Lien vers l'ADIL 64 |
 | Grenoble-Alpes Métropole (21 communes, dont 8 en partie) | Non | Lien vers l'ADIL 38 |
@@ -44,7 +44,7 @@ La lecture prend, dans l'ordre : les données complètes de l'annonce (Leboncoin
 
 - Pas de compte, pas de serveur Check mon loyer, aucune statistique.
 - Le loyer, la surface et le reste de l'annonce ne quittent jamais le navigateur : le calcul est fait localement.
-- Seule la **localisation du logement** part vers des services publics : la Géoplateforme de l'IGN (géocodage de l'adresse ou du quartier, îlots IRIS), puis le service du territoire concerné (Ville de Paris, Métropole de Lyon, Montpellier Méditerranée Métropole) et le catalogue data.gouv.fr. Les requêtes partent sans cookies et sans en-tête `Referer` : ces services ne voient pas l'annonce consultée.
+- Seule la **localisation du logement** part vers des services publics : la Géoplateforme de l'IGN (géocodage de l'adresse ou du quartier, îlots IRIS), puis le service du territoire concerné (Ville de Paris, Métropole de Lyon, Montpellier Méditerranée Métropole) et le catalogue data.gouv.fr. Pour Bordeaux, la grille et les zones sont dans l'extension : seuls le géocodage et les îlots IRIS passent par le réseau. Les requêtes partent sans cookies et sans en-tête `Referer` : ces services ne voient pas l'annonce consultée.
 - Les résultats sont gardés 15 minutes en mémoire, les grilles 24 heures.
 - La seule donnée enregistrée est la liste des sites où vous avez masqué la pastille (`chrome.storage.local`).
 
@@ -71,6 +71,15 @@ Chaque source renvoie des lignes au même format (`lib/grid.js`) : `{ zone, year
 | `lyon` | IRIS du point (Géoplateforme), puis `codeiris` dans la couche WFS | `valeurs` : pièces → époque → meublé, niveaux reconnus par leur contenu |
 | `montpellier` | contours des zones, ou IRIS → zone | classeur `.xlsx` lu sans dépendance (`lib/xlsx.js`) |
 
+### Bordeaux : mise à jour annuelle
+
+Bordeaux ne publie ni sa grille ni ses zones en données interrogeables : elles sont intégrées à l'extension (`extension/lib/data/`).
+
+- **Grille** (chaque 15 juillet) : télécharger le tableur `Tableaux_loyers_reference_Bordeaux_Arrete_….xlsx` sur la page de la préfecture de la Gironde, puis `node tools/bordeaux-grille.mjs <fichier.xlsx>`. Le script vérifie les 256 lignes (4 zones × 4 tailles × 4 époques × vide/meublé × appartement/maison) et la cohérence de chaque triplet.
+- **Zones** (seulement si la préfecture change le découpage) : remplacer `tools/bordeaux/carte-zones.webp` par la nouvelle carte, puis `python3 tools/bordeaux/zones.py` (numpy et Pillow). Le script classe les couleurs, cale la carte sur le contour de la commune (`tools/bordeaux/contour-bordeaux.geojson`, IGN Admin Express, Licence ouverte) et écrit une grille d'environ 28 m de côté.
+
+À l'exécution, la zone d'une adresse est celle de son îlot IRIS (contours de la Géoplateforme), d'après la part de l'îlot couverte par chaque zone sur la carte ; si le service des îlots ne répond pas, la carte est lue directement autour du point avec une marge de 40 m.
+
 ### Ajouter un territoire
 
 Écrire `extension/lib/sources/<id>.js` qui renvoie les lignes de grille pour une zone `{ lat, lon, radius, citycode }`, l'enregistrer dans `lib/check.js`, renseigner `source` dans `lib/territories.js`, et ajouter l'hôte du service dans `host_permissions` du manifeste.
@@ -81,7 +90,7 @@ Chaque source renvoie des lignes au même format (`lib/grid.js`) : `{ zone, year
 npm test
 ```
 
-Tests unitaires : époques, triplets, verdict (époque inconnue, charges non précisées, complément de loyer), lecture d'annonces types (Leboncoin, SeLoger, PAP, Bien'ici, pages ignorées), et les trois sources avec réponses simulées (dont un vrai classeur `.xlsx` généré).
+Tests unitaires : époques, triplets, verdict (époque inconnue, charges non précisées, complément de loyer), lecture d'annonces types (Leboncoin, SeLoger, PAP, Bien'ici, pages ignorées), les trois sources en ligne avec réponses simulées (dont un vrai classeur `.xlsx` généré), et Bordeaux (grille de l'arrêté, zones en des lieux connus, maison ou appartement, repli sur la carte sans îlots).
 
 ```bash
 CHROME_PATH=/chemin/vers/chrome npm run e2e
@@ -101,6 +110,7 @@ Interroge en direct les services publics avec le code de l'extension (Paris, Lyo
 
 - **Pas encore vérifiée sur les vrais sites ni sur les vrais services.** L'extension a été écrite dans un environnement sans accès à ces sites : la lecture des annonces suit leur structure publique connue, et les adresses et formats des services de données viennent de leur documentation et de clients existants. À la première utilisation, lancer `npm run check:live`, puis ouvrir quelques annonces réelles ; si une valeur est mal lue, le formulaire du panneau permet de la corriger.
 - Les grilles en données ouvertes sont indicatives : seul l'arrêté préfectoral fait foi.
-- Plaine Commune et Est Ensemble distinguent maisons et appartements ; Paris, Lyon et Montpellier non. Ces deux territoires ne sont pas encore calculés.
+- Plaine Commune et Est Ensemble ne sont pas encore calculés (grilles distinctes pour les maisons et les appartements, comme Bordeaux).
+- Bordeaux : les zones viennent de la carte officielle, calée sur le contour de la commune à quelques dizaines de mètres près. La zone d'une adresse est celle de son îlot IRIS ; un îlot que la carte partage entre deux zones reçoit les deux (fourchette de plafonds).
 - Quand l'annonce ne donne qu'une position approximative, le plafond couvre les secteurs voisins : indiquer l'adresse dans le formulaire l'affine.
 - Les baux de colocation, les chambres et les logements de fonction ne sont pas vérifiés.

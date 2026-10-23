@@ -20,6 +20,9 @@ export function parsePeriod(label) {
   const s = text.toLowerCase().replace(/_/g, ' ');
   let m = s.match(/(\d{4})\s*(?:-|–|—|à|a|au|\s)\s*(\d{4})/);
   if (m) return { label: text, from: Number(m[1]), to: Number(m[2]) };
+  // Fin abrégée : « 1946-70 ».
+  m = s.match(/((\d{2})\d{2})\s*(?:-|–|—|à)\s*(\d{2})\b/);
+  if (m) return { label: text, from: Number(m[1]), to: Number(`${m[2]}${m[3]}`) };
   m = s.match(/(?:avant|<|jusqu'?\s*(?:à|en))\s*(\d{4})/);
   if (m) return { label: text, from: null, to: Number(m[1]) - (/jusqu/.test(s) ? 0 : 1) };
   m = s.match(/(?:apr[eè]s|post|>|plus de)\s*(\d{4})/);
@@ -79,8 +82,16 @@ export function parseYear(value) {
   return m ? Number(m[0]) : null;
 }
 
-/** Ligne de grille normalisée, ou null si elle est inutilisable. */
-export function makeRow({ zone, year = null, rooms, period, furnished, min, ref, max }) {
+/** Type de logement, pour les grilles qui distinguent maisons et appartements (Bordeaux). */
+export function parseKind(label) {
+  const s = String(label ?? '').toLowerCase();
+  if (/maison|villa|pavillon/.test(s)) return 'maison';
+  if (/appart|studio|loft|duplex|triplex|chambre/.test(s)) return 'appartement';
+  return null;
+}
+
+/** Ligne de grille normalisée, ou null si elle est inutilisable. `kind` : 'appartement', 'maison', ou null si la grille ne distingue pas. */
+export function makeRow({ zone, year = null, rooms, period, furnished, min, ref, max, kind = null }) {
   const r = gridRooms(rooms);
   const f = typeof furnished === 'boolean' ? furnished : parseFurnished(furnished);
   const p = typeof period === 'object' && period ? period : parsePeriod(period);
@@ -88,5 +99,5 @@ export function makeRow({ zone, year = null, rooms, period, furnished, min, ref,
   const refN = toNumber(ref);
   const minN = toNumber(min);
   if (r == null || f == null || maxN == null || maxN <= 0) return null;
-  return { zone: zone == null ? '' : String(zone), year: parseYear(year), rooms: r, period: p, furnished: f, min: minN, ref: refN, max: maxN };
+  return { zone: zone == null ? '' : String(zone), year: parseYear(year), rooms: r, period: p, furnished: f, kind: kind ? parseKind(kind) : null, min: minN, ref: refN, max: maxN };
 }

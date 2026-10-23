@@ -1,5 +1,5 @@
 // Vérification en direct des services publics de données, avec le code de l'extension :
-// géocodage, IRIS, grilles de Paris, Lyon-Villeurbanne et Montpellier. À relancer de temps en temps
+// géocodage, IRIS, grilles de Paris, Lyon-Villeurbanne et Montpellier, îlots de Bordeaux. À relancer de temps en temps
 // (les portails changent de format sans prévenir) et après chaque nouvelle grille annuelle.
 //
 // Usage : node tools/live-check.mjs
@@ -13,7 +13,7 @@ const CASES = [
   ['Lyon', { address: '10 rue de la République', postcode: '69002', city: 'Lyon' }, 'lyon'],
   ['Villeurbanne', { address: 'Place Lazare Goujon', postcode: '69100', city: 'Villeurbanne' }, 'lyon'],
   ['Montpellier', { address: '1 place de la Comédie', postcode: '34000', city: 'Montpellier' }, 'montpellier'],
-  ['Bordeaux (encadré, sans calcul)', { postcode: '33000', city: 'Bordeaux' }, 'bordeaux'],
+  ['Bordeaux (îlots IRIS + zones intégrées)', { address: '1 place de la Bourse', postcode: '33000', city: 'Bordeaux' }, 'bordeaux'],
   ['Mérignac (non encadré)', { postcode: '33700', city: 'Mérignac' }, null],
 ];
 
@@ -23,7 +23,7 @@ for (const [label, location, territory] of CASES) {
   try {
     const r = await checkListing({ listing, location });
     const v = r.verdict;
-    const ok = (r.territory?.id ?? null) === territory && (!['paris', 'lyon', 'montpellier'].includes(territory) || v?.perM2);
+    const ok = (r.territory?.id ?? null) === territory && (!['paris', 'lyon', 'montpellier', 'bordeaux'].includes(territory) || v?.perM2);
     if (!ok) failures++;
     console.log(`${ok ? 'ok  ' : 'ÉCHEC'} ${label} — ${r.status}${r.place ? ` · ${r.place.label}` : ''} (${Date.now() - started} ms)`);
     if (v?.perM2) console.log(`      majoré ${v.perM2.min} à ${v.perM2.max} €/m² · secteurs ${v.zones.join(', ')} · grille ${v.years.join(', ') || '?'} · époques ${v.periods.join(', ')}`);

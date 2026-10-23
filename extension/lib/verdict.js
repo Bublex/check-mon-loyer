@@ -6,7 +6,7 @@
 // Quand une information manque (époque de construction, meublé, adresse exacte, charges),
 // on considère toutes les possibilités : le verdict n'est tranché que s'il vaut pour toutes.
 
-import { gridRooms, periodOverlaps, periodKnown } from './grid.js';
+import { gridRooms, periodOverlaps, periodKnown, parseKind } from './grid.js';
 
 const TOLERANCE = 1; // euro : les grilles et les annonces arrondissent.
 
@@ -43,7 +43,9 @@ export function rentRange(rent) {
 export function candidateRows(rows, listing) {
   const rooms = gridRooms(listing.rooms);
   const byRooms = rows.filter((r) => rooms == null || r.rooms === rooms);
-  const byFurnished = byRooms.filter((r) => listing.furnished == null || r.furnished === listing.furnished);
+  const kind = parseKind(listing.kind);
+  const byKind = byRooms.filter((r) => r.kind == null || kind == null || r.kind === kind);
+  const byFurnished = byKind.filter((r) => listing.furnished == null || r.furnished === listing.furnished);
   // Une époque illisible dans la grille ne doit pas faire disparaître la ligne.
   const byPeriod = byFurnished.filter((r) => !periodKnown(r.period) || periodOverlaps(r.period, listing.construction));
   return byPeriod.length ? byPeriod : byFurnished;
@@ -52,7 +54,7 @@ export function candidateRows(rows, listing) {
 const uniq = (list) => [...new Set(list.filter((x) => x !== '' && x != null))];
 
 /**
- * @param listing { surface, rooms, furnished, construction: {from,to}|null, rent: {amount, chargesIncluded, charges, complement, base}, dpe }
+ * @param listing { surface, rooms, furnished, kind, construction: {from,to}|null, rent: {amount, chargesIncluded, charges, complement, base}, dpe }
  * @param rows lignes de grille (voir grid.js), déjà limitées au(x) secteur(s) possibles du logement
  * @param location { approximate } : l'adresse exacte est-elle connue ?
  */
@@ -77,6 +79,7 @@ export function evaluate(listing, rows, location = {}) {
   const varies = (key) => new Set(candidates.map(key)).size > 1;
   if (rooms == null && varies((r) => r.rooms)) spread.push('rooms');
   if (listing.furnished == null && varies((r) => r.furnished)) spread.push('furnished');
+  if (parseKind(listing.kind) == null && varies((r) => r.kind)) spread.push('kind');
   if (varies((r) => r.period.label)) spread.push('period');
   if (zones.length > 1) spread.push(location.approximate ? 'address' : 'zone');
 

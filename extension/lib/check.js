@@ -6,8 +6,9 @@ import { evaluate } from './verdict.js';
 import { parisRows } from './sources/paris.js';
 import { lyonRows } from './sources/lyon.js';
 import { montpellierRows } from './sources/montpellier.js';
+import { bordeauxRows } from './sources/bordeaux.js';
 
-const SOURCES = { paris: parisRows, lyon: lyonRows, montpellier: montpellierRows };
+const SOURCES = { paris: parisRows, lyon: lyonRows, montpellier: montpellierRows, bordeaux: bordeauxRows };
 
 // Coordonnées fournies par un site d'annonces sans adresse exacte (pastille « quartier » sur la carte).
 const APPROXIMATE_COORDS_RADIUS = 500;
