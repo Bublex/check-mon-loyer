@@ -30,6 +30,8 @@
     lock: ['M6 11h12v10H6z', 'M8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
     check: ['M5 12.5l4.5 4.5L19 7.5'],
     alert: ['M12 8v5', 'M12 16.5v.5', 'M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'],
+    // Panneau « stop » : loyer au-dessus du plafond, distinct du triangle d'avertissement (dépassement possible).
+    stop: ['M12 7.5v5', 'M12 16v.5', 'M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86z'],
     help: ['M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6', 'M12 17v.5', 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z'],
   };
 
@@ -121,7 +123,7 @@
     switch (r.status) {
       case 'over': {
         const exact = v.ceiling.low === v.ceiling.high;
-        return { tone: 'err', title: 'Loyer au-dessus du plafond', detail: `${exact ? '' : 'Au moins '}${eur(v.overBy)} de trop par mois` };
+        return { tone: 'err', icon: 'stop', title: 'Loyer au-dessus du plafond', detail: `${exact ? '' : 'Au moins '}${eur(v.overBy)} de trop par mois` };
       }
       case 'under':
         return { tone: 'ok', title: 'Loyer conforme à l’encadrement', detail: `Plafond : ${eur(v.ceiling.low)} hors charges` };
@@ -203,15 +205,15 @@
     switch (r.status) {
       case 'over': {
         const amount = v.ceiling.low === v.ceiling.high ? `de ${eur(v.overBy)}` : `d’au moins ${eur(v.overBy)}`;
-        return ['err', 'alert', 'Loyer au-dessus du plafond légal', `Dépassement ${amount} sur le loyer CC.`];
+        return ['err', 'stop', 'Loyer au-dessus du plafond légal', `Dépassement ${amount} sur le loyer CC.`];
       }
       case 'under':
         return ['ok', 'check', 'Loyer conforme à l’encadrement', `Il reste ${eur(v.margin)} sous le plafond.`];
       case 'depends':
         if (v.probability != null) {
-          return ['wait', 'help', `Risque de dépassement : ${percent(v.probability)}`, `Le plafond dépend ${ofFr(joinFr(v.spread.map((k) => SPREAD[k])))}.`];
+          return ['wait', 'alert', `Risque de dépassement : ${percent(v.probability)}`, `Le plafond dépend ${ofFr(joinFr(v.spread.map((k) => SPREAD[k])))}.`];
         }
-        return ['wait', 'help', 'Peut dépasser le plafond',
+        return ['wait', 'alert', 'Peut dépasser le plafond',
           `Le verdict dépend ${ofFr(joinFr(v.spread.map((k) => SPREAD[k])))}. ${v.question ? 'Répondez aux questions ci-dessous.' : 'Précisez-le ci-dessous.'}`];
       case 'incomplete':
         return ['info', 'help', 'Informations manquantes', `Indiquez ${joinFr((v.missing || []).map((k) => MISSING[k]))} pour calculer le plafond.`];
@@ -694,7 +696,7 @@
       if (!last) return;
       const s = summarize(last);
       pill.className = `pill tone-${s.tone}`;
-      const pillIcon = { ok: 'check', err: 'alert', wait: 'help' }[s.tone] || 'home';
+      const pillIcon = s.icon || { ok: 'check', err: 'alert', wait: 'alert' }[s.tone] || 'home';
       pill.replaceChildren(
         h('span', { class: 'pill-icon' }, s.busy ? h('span', { class: 'spinner' }) : icon(pillIcon, 15)),
         h('span', { class: 'pill-text' }, h('span', { class: 'pill-title' }, s.title), s.detail ? h('span', { class: 'pill-detail' }, s.detail) : null));
