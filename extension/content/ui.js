@@ -208,7 +208,7 @@
     switch (r.status) {
       case 'over': {
         const amount = v.ceiling.low === v.ceiling.high ? `de ${eur(v.overBy)}` : `d’au moins ${eur(v.overBy)}`;
-        return ['err', 'stop', 'Loyer au-dessus du plafond légal', `Dépassement ${amount} sur le loyer CC.`];
+        return ['err', 'stop', 'Loyer au-dessus du plafond légal', `Le loyer hors charges le dépasse ${amount} par mois.`];
       }
       case 'under':
         return ['ok', 'check', 'Loyer conforme à l’encadrement', `Il reste ${eur(v.margin)} sous le plafond.`];
