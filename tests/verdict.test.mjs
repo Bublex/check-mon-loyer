@@ -138,6 +138,7 @@ test('Époque inconnue : probabilité de dépassement pondérée par les logemen
   assert.equal(evaluate(unknown, grid).probability, 0.5, 'sans répartition connue, chaque époque compte autant');
   // La question la plus utile : avant 1946 (oui : conforme ; non : dépassement probable).
   assert.equal(v.question.text, 'Le bâtiment date-t-il d’avant 1946 ?');
+  assert.equal(v.question.year, 1946);
   assert.deepEqual(v.question.yes.construction, { from: null, to: 1945, label: 'Avant 1946' });
 
   const after1946 = evaluate({ ...unknown, construction: v.question.no.construction }, grid, { periodShares: paris });

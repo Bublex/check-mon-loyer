@@ -161,6 +161,19 @@ try {
       // Époque inconnue : la question « avant 1946 ? » est proposée ; « Non » tranche (seule l'époque 1946-1970 reste).
       const question = await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.question-text')?.textContent`);
       check('question proposée : avant 1946 ?', () => assert.equal(question, 'Le bâtiment date-t-il d’avant 1946 ?'));
+      await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.tip-btn').click()`);
+      await sleep(300);
+      const tip = await chrome.evaluate(s, `(() => {
+        const root = document.querySelector('[data-check-mon-loyer]').shadowRoot;
+        const pop = root.querySelector('.tip-pop');
+        return { shown: getComputedStyle(pop).display !== 'none', expanded: root.querySelector('.tip-btn').getAttribute('aria-expanded'), text: pop.textContent };
+      })()`);
+      check('infobulle « Comment savoir ? » : indices et sources', () => {
+        assert.equal(tip.shown, true);
+        assert.equal(tip.expanded, 'true');
+        assert.match(tip.text, /Avant 1946 : pierre de taille/);
+        assert.match(tip.text, /Le bail doit indiquer la période de construction/);
+      });
       await chrome.screenshot(s, join(OUT, `${prefix}-question.png`));
       await chrome.evaluate(s, `[...document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelectorAll('.answer')].find((b) => b.textContent === 'Non').click()`);
       await sleep(1500);

@@ -4,7 +4,7 @@ Extension Chrome. Sur une annonce de location (Leboncoin, SeLoger, PAP, Bien'ici
 
 - **Plafond calculé** avec les loyers de référence publiés en données ouvertes : loyer de référence majoré (€/m²) × surface habitable, comparé au loyer hors charges.
 - **Verdict prudent** : quand l'annonce ne dit pas tout (époque de construction, meublé ou non, adresse exacte, montant des charges), toutes les possibilités sont calculées. Le verdict n'est tranché (« au-dessus » ou « conforme ») que s'il vaut pour toutes ; sinon la pastille dit de quoi il dépend.
-- **Risque de dépassement** quand le verdict dépend d'une inconnue, le plus souvent l'année de construction : chaque époque de la grille compte pour la part des logements de la commune qui en datent (recensement de l'Insee). En dessous, une question oui/non choisie pour trancher au plus vite (« Le bâtiment date-t-il d'avant 1946 ? », « Le logement est-il loué meublé ? ») relance le calcul.
+- **Risque de dépassement** quand le verdict dépend d'une inconnue, le plus souvent l'année de construction : chaque époque de la grille compte pour la part des logements de la commune qui en datent (recensement de l'Insee). En dessous, une question oui/non choisie pour trancher au plus vite (« Le bâtiment date-t-il d'avant 1946 ? », « Le logement est-il loué meublé ? ») relance le calcul. Son infobulle « Comment savoir ? » donne des indices pour y répondre (style de l'immeuble, bail, DPE, photos aériennes anciennes de l'IGN ; dépôt de garantie et durée du bail pour un meublé).
 - **Complément de loyer** pris à part, et signalé quand il est interdit (logement classé F ou G).
 - **Fenêtre de l'extension** (icône de la barre d'outils) : vérification d'un logement décrit à la main, sur n'importe quel site.
 

@@ -157,8 +157,8 @@ function bestQuestion(rows, listing, rentHC, shares) {
   for (const year of bounds) {
     split((r) => r.period.to != null && r.period.to < year, {
       topic: 'period',
+      year,
       text: `Le bâtiment date-t-il d’avant ${year} ?`,
-      hint: year === 1946 ? 'Un immeuble haussmannien ou en pierre de taille date d’avant 1946.' : null,
       yes: { construction: { from: c.from ?? null, to: year - 1, label: c.from != null ? `${c.from} à ${year - 1}` : `Avant ${year}` } },
       no: { construction: { from: year, to: c.to ?? null, label: c.to != null ? `${year} à ${c.to}` : `${year} ou après` } },
     });

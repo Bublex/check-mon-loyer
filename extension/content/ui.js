@@ -230,14 +230,132 @@
     }
   }
 
+  // --- Astuces pour répondre aux questions (« Comment savoir ? ») ---
+
+  const IGN_URL = 'https://remonterletemps.ign.fr/';
+
+  // Indices d'époque autour de chaque seuil des grilles, et ce que montrent les photos aériennes de l'IGN.
+  const ERA_CLUES = {
+    1946: {
+      before: 'pierre de taille, style haussmannien, moulures, cheminées, parquet en chevrons, plafonds de 2,80 m et plus. À Bordeaux : échoppes, pierre blonde.',
+      after: 'béton, façade lisse, grands ensembles, plafonds de 2,50 m environ.',
+      photo: 'un immeuble absent des photos 1950-1965 date d’après 1946',
+    },
+    1971: {
+      before: 'reconstruction, barres et tours en béton, panneaux préfabriqués, vide-ordures.',
+      after: 'isolation d’origine (obligatoire depuis 1974), balcons filants, parking en sous-sol.',
+      photo: 'un immeuble visible sur les photos 1950-1965 date d’avant 1971',
+    },
+    1991: {
+      before: 'façades en béton, en brique ou carrelées, menuiseries en aluminium.',
+      after: 'double vitrage d’origine, parking en sous-sol, ascenseur, digicode.',
+    },
+    2006: {
+      after: '« livré en 20XX », « BBC », « RT 2012 », « Pinel », DPE en A ou B.',
+      photo: 'un immeuble absent des photos 2000-2005 date d’après 2005',
+    },
+  };
+
+  const TIPS = {
+    period: ({ year }) => {
+      const era = ERA_CLUES[year] || {};
+      return {
+        clues: [era.before && [`Avant ${year}`, era.before], era.after && [`${year} ou après`, era.after]].filter(Boolean),
+        sure: [
+          'Le bail doit indiquer la période de construction : demandez-la à l’agence ou au bailleur.',
+          'Le DPE mentionne l’année de construction.',
+        ],
+        link: [IGN_URL, 'Remonter le temps (IGN)', era.photo ? ` : ${era.photo}.` : ' : photos aériennes anciennes de l’adresse.'],
+      };
+    },
+    furnished: () => ({
+      clues: [
+        ['Dépôt de garantie', '2 mois de loyer au plus en meublé, 1 mois en vide.'],
+        ['Durée du bail', '1 an (9 mois pour un étudiant) en meublé, 3 ans en vide.'],
+        ['Équipement', 'un meublé fournit literie, plaques, four ou micro-ondes, réfrigérateur avec congélateur, vaisselle, table, chaises et rangements.'],
+      ],
+      sure: [],
+    }),
+    kind: () => ({
+      clues: [
+        ['Maison', 'logement individuel avec sa propre entrée. À Bordeaux, une échoppe est une maison.'],
+        ['Appartement', 'logement dans un immeuble collectif, duplex compris.'],
+      ],
+      sure: [],
+    }),
+  };
+
+  let tipCount = 0;
+
+  /**
+   * Infobulle « Comment savoir ? » : s'ouvre au survol ou au clic (le clic la garde ouverte), se ferme avec Échap
+   * ou quand le focus la quitte. Elle s'ouvre vers le haut quand la place manque en dessous.
+   */
+  function renderTip(question) {
+    const tips = TIPS[question.topic]?.(question);
+    if (!tips || (!tips.clues.length && !tips.sure.length)) return null;
+    const id = `cml-tip-${++tipCount}`;
+    const url = tips.link && safeUrl(tips.link[0]);
+    const sources = [...tips.sure.map((t) => h('li', null, t)),
+      url ? h('li', null, h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, tips.link[1], icon('external', 12)), tips.link[2]) : null].filter(Boolean);
+    const pop = h('div', { class: 'tip-pop', id },
+      tips.clues.map(([label, text]) => h('p', null, h('strong', null, `${label} : `), text)),
+      sources.length ? [h('div', { class: 'tip-sure' }, 'Pour en être sûr'), h('ul', null, sources)] : null);
+    const tip = h('div', { class: 'tip' });
+    let pinned = false;
+    let timer = null;
+
+    const place = () => {
+      pop.classList.remove('up');
+      pop.style.maxHeight = '';
+      const box = (tip.closest('.body') || document.documentElement).getBoundingClientRect();
+      const anchor = (tip.closest('.question') || tip).getBoundingClientRect();
+      const below = Math.min(box.bottom, innerHeight) - anchor.bottom - 12;
+      const above = anchor.top - Math.max(box.top, 0) - 12;
+      const up = pop.offsetHeight > below && above > below;
+      pop.classList.toggle('up', up);
+      if (pop.offsetHeight > Math.max(above, below)) pop.style.maxHeight = `${Math.max(above, below, 120)}px`;
+    };
+    const show = () => {
+      clearTimeout(timer);
+      if (tip.classList.contains('is-open')) return;
+      tip.classList.add('is-open');
+      button.setAttribute('aria-expanded', 'true');
+      place();
+    };
+    const hide = () => {
+      clearTimeout(timer);
+      pinned = false;
+      tip.classList.remove('is-open');
+      button.setAttribute('aria-expanded', 'false');
+    };
+    const hideSoon = () => {
+      clearTimeout(timer);
+      if (!pinned) timer = setTimeout(hide, 250);
+    };
+
+    const button = h('button', { class: 'tip-btn', type: 'button', 'aria-expanded': 'false', 'aria-controls': id,
+      onclick: () => { if (pinned) hide(); else { pinned = true; show(); } } }, icon('help', 14), 'Comment savoir ?');
+    for (const el of [button, pop]) {
+      el.addEventListener('mouseenter', show);
+      el.addEventListener('mouseleave', hideSoon);
+    }
+    tip.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && tip.classList.contains('is-open')) { e.stopPropagation(); hide(); button.focus(); }
+    });
+    tip.addEventListener('focusout', (e) => { if (pinned && !tip.contains(e.relatedTarget)) hide(); });
+    tip.append(button, pop);
+    return tip;
+  }
+
   /** Question oui/non pour affiner (« Le bâtiment date-t-il d'avant 1946 ? ») : la réponse relance le calcul. */
   function renderQuestion(question, handlers) {
     return h('div', { class: 'question' },
       h('div', { class: 'question-text' }, question.text),
-      question.hint ? h('div', { class: 'question-hint' }, question.hint) : null,
       h('div', { class: 'question-actions' },
         h('button', { class: 'answer', type: 'button', onclick: () => handlers.onEdit?.(question.yes) }, 'Oui'),
-        h('button', { class: 'answer', type: 'button', onclick: () => handlers.onEdit?.(question.no) }, 'Non')));
+        h('button', { class: 'answer', type: 'button', onclick: () => handlers.onEdit?.(question.no) }, 'Non'),
+        renderTip(question)));
   }
 
   function renderVerdict(state, handlers = {}) {
@@ -482,7 +600,7 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; animation: rise .16s ease-out; }
 .card[hidden] { display: none; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .card { animation: none; } .spinner { animation-duration: 2s; } }
+@media (prefers-reduced-motion: reduce) { .card, .tip-pop { animation: none; } .spinner { animation-duration: 2s; } }
 .card-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 0 14px; }
 .brand { display: flex; align-items: center; gap: 7px; font-weight: 700; letter-spacing: .01em; }
 .brand-mark { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: var(--accent-fg); }
@@ -529,10 +647,24 @@ button, input, select { font: inherit; color: inherit; }
 .gauge.tone-wait .gauge-thumb { background: var(--wait); }
 .gauge.tone-err .gauge-thumb { background: var(--err); }
 .gauge-caption { margin-top: 4px; color: var(--muted); font-size: 12px; }
-.question { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+.question { position: relative; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
 .question-text { font-weight: 650; }
-.question-hint { margin-top: 2px; color: var(--muted); font-size: 12px; }
-.question-actions { display: flex; gap: 8px; margin-top: 8px; }
+.question-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.tip { margin-left: auto; }
+.tip-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 4px; border: 0; background: none; color: var(--accent);
+  font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.tip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.tip-pop { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 3; overflow-y: auto; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg); box-shadow: var(--shadow); font-size: 12px; line-height: 1.45; animation: rise .14s ease-out; }
+.tip-pop.up { top: auto; bottom: calc(100% + 6px); }
+.tip.is-open .tip-pop { display: block; }
+.tip-pop p { margin: 0 0 6px; }
+.tip-pop strong { font-weight: 650; }
+.tip-sure { margin-top: 8px; font-weight: 650; }
+.tip-pop ul { margin: 4px 0 0; padding-left: 16px; color: var(--muted); }
+.tip-pop li + li { margin-top: 3px; }
+.tip-pop a { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; }
+.tip-pop a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .answer { min-width: 64px; padding: 6px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--bg); color: var(--accent); font-weight: 600; cursor: pointer; }
 .answer:hover { background: var(--accent); color: var(--accent-fg); }
 .answer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
