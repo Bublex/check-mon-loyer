@@ -164,8 +164,10 @@ try {
       await chrome.screenshot(s, join(OUT, `${prefix}-question.png`));
       await chrome.evaluate(s, `[...document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelectorAll('.answer')].find((b) => b.textContent === 'Non').click()`);
       await sleep(1500);
-      const figures = await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.figures')?.textContent`);
-      check('réponse « Non » : plafond exact', () => assert.match(figures, /14,40\u00a0€\/m² × 38\u00a0m² = 547\u00a0€ hors charges/));
+      const gauge = await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.gauge')?.getAttribute('aria-label')`);
+      check('réponse « Non » : jauge au plafond exact', () => assert.equal(gauge, 'Loyer hors charges : 560\u00a0€. Plafond légal : 547\u00a0€.'));
+      const facts = await chrome.evaluate(s, `document.querySelector('[data-check-mon-loyer]').shadowRoot.querySelector('.facts')?.textContent`);
+      check('réponse « Non » : calcul du plafond détaillé', () => assert.match(facts, /14,40\u00a0€\/m² × 38\u00a0m² = 547\u00a0€ hors charges/));
       const after = await pill(s);
       check('pastille après réponse : 13 € de trop', () => assert.deepEqual(after, { title: 'Loyer au-dessus du plafond', detail: '13\u00a0€ de trop par mois' }));
       await chrome.screenshot(s, join(OUT, `${prefix}-panneau-corrige.png`));

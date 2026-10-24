@@ -11,6 +11,7 @@
       if (value === undefined || value === null || value === false) continue;
       if (key === 'class') el.className = value;
       else if (key === 'text') el.textContent = value;
+      else if (key === 'style') el.style.cssText = value;
       else if (key.startsWith('on')) el.addEventListener(key.slice(2), value);
       else el.setAttribute(key, value === true ? '' : value);
     }
@@ -161,6 +162,38 @@
     return `Plafond : entre ${eur(v.ceiling.low)} et ${eur(v.ceiling.high)} hors charges (${perM2(v.perM2.min)} à ${perM2(v.perM2.max)} × ${m2(surface)})`;
   }
 
+  /**
+   * Jauge : le loyer hors charges (curseur) face au plafond légal (un repère, ou une bande hachurée
+   * quand le plafond dépend d'une inconnue). Vert sous le plafond, rouge au-dessus.
+   */
+  function renderGauge(v, status) {
+    const unsure = v.rentHC.lo == null;
+    const rent = unsure ? v.rentHC.hi : v.rentHC.lo;
+    const { low, high } = v.ceiling;
+    const min = Math.min(low, rent);
+    const max = Math.max(high, rent);
+    const pad = Math.max((max - min) * 0.35, high * 0.12, 1);
+    const from = Math.max(0, min - pad);
+    const to = max + pad;
+    const at = (x) => Math.round(((x - from) / (to - from)) * 1000) / 10;
+    const [a, b, r] = [at(low), at(high), at(rent)];
+    const mid = (a + b) / 2;
+    const tone = status === 'over' ? 'err' : status === 'under' ? 'ok' : 'wait';
+    const rentText = `${unsure ? '≤\u00a0' : ''}${eur(rent)}`;
+    const ceilingText = low === high ? eur(high) : `${euroFmt.format(low)} à ${eur(high)}`;
+    const label = `Loyer hors charges : ${unsure ? 'au plus ' : ''}${eur(rent)}. Plafond légal : ${low === high ? eur(high) : `entre ${eur(low)} et ${eur(high)}`}.`;
+    // Les étiquettes sont décalées de leur propre position (translateX(-x %)) : elles restent dans la jauge aux extrémités.
+    return h('div', { class: `gauge tone-${tone}`, role: 'img', 'aria-label': label },
+      h('div', { class: 'gauge-labels' },
+        h('span', { class: 'gauge-rent', style: `left: ${r}%; transform: translateX(-${r}%)` }, `Loyer ${rentText}`)),
+      h('div', { class: 'gauge-track', style: `--a: ${a}%; --b: ${b}%` },
+        h('span', { class: low === high ? 'gauge-band is-exact' : 'gauge-band' }),
+        h('span', { class: 'gauge-thumb', style: `left: ${r}%` })),
+      h('div', { class: 'gauge-labels' },
+        h('span', { class: 'gauge-ceiling', style: `left: ${mid}%; transform: translateX(-${mid}%)` }, `Plafond ${ceilingText}`)),
+      h('div', { class: 'gauge-caption' }, low === high ? 'Montants mensuels hors charges' : 'Montants mensuels hors charges. Hachures : plafond encore incertain.'));
+  }
+
   function headline(r) {
     const v = r.verdict || {};
     switch (r.status) {
@@ -212,16 +245,18 @@
     const v = r.verdict || {};
     const inputs = state.inputs || {};
     const [tone, ico, title, text] = headline(r);
+    const gauge = v.rentHC && v.ceiling;
     const lines = [];
-    if (v.rentHC) lines.push(['Loyer demandé', rentLine(v, inputs)]);
-    if (v.perM2) lines.push(['Maximum légal', ceilingLine(v, inputs).replace(/^Plafond : /, '')]);
+    if (!gauge && v.rentHC) lines.push(['Loyer demandé', rentLine(v, inputs)]);
+    if (!gauge && v.perM2) lines.push(['Maximum légal', ceilingLine(v, inputs).replace(/^Plafond : /, '')]);
     const announced = inputs.announcedCeiling;
     const out = [
       h('div', { class: `verdict tone-${tone}` },
         h('div', { class: 'verdict-icon' }, icon(ico, 18)),
-        h('div', { class: 'verdict-text' }, h('div', { class: 'verdict-title' }, title), text ? h('p', null, text) : null)),
-      v.probability != null ? h('div', { class: 'meter', role: 'img', 'aria-label': `Risque de dépassement : ${percent(v.probability)}` },
-        h('span', { class: 'meter-fill', style: `width: ${Math.round(v.probability * 100)}%` })) : null,
+        h('div', { class: 'verdict-text' }, h('div', { class: 'verdict-title' }, title), text ? h('p', null, text) : null,
+          v.probability != null ? h('div', { class: 'meter', role: 'img', 'aria-label': `Risque de dépassement : ${percent(v.probability)}` },
+            h('span', { class: 'meter-fill', style: `width: ${Math.round(v.probability * 100)}%` })) : null)),
+      gauge ? renderGauge(v, r.status) : null,
       v.question ? renderQuestion(v.question, handlers) : null,
       lines.length ? h('dl', { class: 'figures' }, lines.flatMap(([k, val]) => [h('dt', null, k), h('dd', null, val)])) : null,
     ];
@@ -241,8 +276,10 @@
       out.push(h('p', { class: 'note' }, `L’annonce indique un loyer de référence majoré de ${perM2(announced)} ; la grille en vigueur donne ${perM2(v.perM2.max)}.`));
     }
     if (v.assumptions?.length) out.push(h('p', { class: 'note' }, `${v.assumptions.join('. ')}.`));
-    if (v.zones?.length || v.years?.length) {
+    if (gauge || v.zones?.length || v.years?.length) {
       const facts = [
+        gauge ? `Loyer hors charges : ${rentLine(v, inputs)}` : null,
+        gauge ? ceilingLine(v, inputs) : null,
         v.zones?.length ? `${v.zones.length > 1 ? 'Secteurs' : 'Secteur'} : ${v.zones.join(', ')}` : null,
         v.periods?.length ? `Époque${v.periods.length > 1 ? 's' : ''} : ${v.periods.join(', ')}` : null,
         v.years?.length ? `Grille ${v.years.join(', ')}` : null,
@@ -467,8 +504,31 @@ button, input, select { font: inherit; color: inherit; }
 .verdict.tone-err { background: var(--err-bg); } .verdict.tone-err .verdict-icon, .verdict.tone-err .verdict-title { color: var(--err); }
 .verdict.tone-wait { background: var(--wait-bg); } .verdict.tone-wait .verdict-icon, .verdict.tone-wait .verdict-title { color: var(--wait); }
 .verdict.tone-info { background: var(--info-bg); } .verdict.tone-info .verdict-icon, .verdict.tone-info .verdict-title { color: var(--info); }
-.meter { flex: none; height: 6px; border-radius: 999px; background: var(--ok-bg); overflow: hidden; }
+.verdict-text { flex: 1; min-width: 0; }
+.meter { height: 6px; margin-top: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
 .meter-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--wait), var(--err)); }
+.gauge { padding: 2px 0 0; }
+.gauge-labels { position: relative; height: 20px; }
+.gauge-labels span { position: absolute; top: 0; white-space: nowrap; font-size: 12px; line-height: 20px; }
+.gauge-rent { padding: 0 7px; border-radius: 6px; font-weight: 700; background: var(--none-bg); color: var(--fg); }
+.gauge.tone-ok .gauge-rent { background: var(--ok-bg); color: var(--ok); }
+.gauge.tone-wait .gauge-rent { background: var(--wait-bg); color: var(--wait); }
+.gauge.tone-err .gauge-rent { background: var(--err-bg); color: var(--err); }
+.gauge-ceiling { color: var(--muted); font-weight: 600; }
+.gauge-track { position: relative; height: 8px; margin: 6px 0; border-radius: 999px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--ok) 38%, transparent) 0 var(--a),
+    transparent var(--a) var(--b),
+    color-mix(in srgb, var(--err) 38%, transparent) var(--b) 100%); }
+.gauge-band { position: absolute; top: -3px; bottom: -3px; left: var(--a); width: max(2px, calc(var(--b) - var(--a))); border-radius: 3px;
+  background: repeating-linear-gradient(135deg, var(--wait) 0 2px, color-mix(in srgb, var(--wait) 30%, transparent) 2px 6px); }
+.gauge-band.is-exact { background: var(--fg); border-radius: 1px; }
+.gauge-thumb { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
+  border: 3px solid var(--bg); background: var(--fg); box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, .25); }
+.gauge.tone-ok .gauge-thumb { background: var(--ok); }
+.gauge.tone-wait .gauge-thumb { background: var(--wait); }
+.gauge.tone-err .gauge-thumb { background: var(--err); }
+.gauge-caption { margin-top: 4px; color: var(--muted); font-size: 12px; }
 .question { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
 .question-text { font-weight: 650; }
 .question-hint { margin-top: 2px; color: var(--muted); font-size: 12px; }
