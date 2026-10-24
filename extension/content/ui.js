@@ -252,13 +252,6 @@
       ].filter(Boolean);
       out.push(h('details', { class: 'facts' }, h('summary', null, 'Détail du calcul'), h('ul', null, facts.map((f) => h('li', null, f)))));
     }
-    if (r.status === 'over' || r.status === 'depends') {
-      out.push(h('div', { class: 'advice' },
-        h('div', { class: 'advice-title' }, 'Bon à savoir'),
-        h('ul', null,
-          h('li', null, 'Le loyer de base hors charges ne peut pas dépasser le plafond. Un complément de loyer n’est permis que pour des caractéristiques exceptionnelles, jamais pour un logement classé F ou G.'),
-          h('li', null, 'Bail signé ? Demandez la mise en conformité au bailleur, saisissez la commission départementale de conciliation (gratuite) ou signalez le bail à la préfecture, qui peut sanctionner le bailleur.'))));
-    }
     const official = safeUrl(r.territory?.officialUrl);
     if (official && r.status !== 'under') out.push(h('a', { class: 'cta', href: official, target: '_blank', rel: 'noopener noreferrer' }, 'Simulateur et informations officielles', icon('external', 14)));
     return out;
@@ -489,10 +482,8 @@ button, input, select { font: inherit; color: inherit; }
 .note { margin: 0; color: var(--muted); font-size: 12px; }
 .note.warn { color: var(--err); font-weight: 600; }
 .facts summary, .edit summary { cursor: pointer; color: var(--accent); font-size: 12.5px; font-weight: 600; }
-.facts ul, .advice ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
-.facts li + li, .advice li + li { margin-top: 3px; }
-.advice { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
-.advice-title { font-weight: 650; font-size: 12.5px; }
+.facts ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+.facts li + li { margin-top: 3px; }
 .edit { border-top: 1px solid var(--line); padding-top: 10px; }
 .form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
