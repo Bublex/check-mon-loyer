@@ -81,12 +81,12 @@ function services(href) {
 
 const PAGES = [
   { url: 'https://www.leboncoin.fr/ad/locations/2981234567', file: 'leboncoin-paris.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 156\u00a0€ de trop par mois' } },
-  { url: 'https://www.seloger.com/annonces/locations/appartement/lyon-3eme-69/part-dieu/212345678.htm', file: 'seloger-lyon.html', expect: { title: 'Risque de dépassement : 49\u00a0%', detail: 'Selon l’époque de construction' } },
-  { url: 'https://www.pap.fr/annonces/appartement-montpellier-34000-r412345678', file: 'pap-montpellier.html', expect: { title: 'Loyer conforme à l’encadrement', detail: 'Plafond : 720\u00a0€ hors charges' } },
+  { url: 'https://www.seloger.com/annonces/locations/appartement/lyon-3eme-69/part-dieu/212345678.htm', file: 'seloger-lyon.html', expect: { title: 'Dépassement possible', detail: '49\u00a0% de risque, selon l’époque de construction' } },
+  { url: 'https://www.pap.fr/annonces/appartement-montpellier-34000-r412345678', file: 'pap-montpellier.html', expect: { title: 'Loyer conforme', detail: '80\u00a0€ sous le plafond' } },
   { url: 'https://www.seloger.com/annonces/253456789.htm', file: 'seloger-bordeaux.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 13\u00a0€ de trop par mois' } },
-  { url: 'https://www.bienici.com/annonce/location/montpellier/appartement/2pieces/ag340000-1', file: 'bienici-montpellier.html', expect: { title: 'Loyer conforme à l’encadrement', detail: 'Plafond : 720\u00a0€ hors charges' } },
+  { url: 'https://www.bienici.com/annonce/location/montpellier/appartement/2pieces/ag340000-1', file: 'bienici-montpellier.html', expect: { title: 'Loyer conforme', detail: '80\u00a0€ sous le plafond' } },
   { url: 'https://www.pap.fr/annonces/appartement-bordeaux-33000-r412345679', file: 'pap-bordeaux.html', expect: { title: 'Loyer au-dessus du plafond', detail: '144\u00a0€ de trop par mois' } },
-  { url: 'https://www.bienici.com/annonce/location/paris-11e/appartement/2pieces/ag750000-7', file: 'bienici-paris.html', expect: { title: 'Peut dépasser le plafond', detail: 'Selon le montant des charges' } },
+  { url: 'https://www.bienici.com/annonce/location/paris-11e/appartement/2pieces/ag750000-7', file: 'bienici-paris.html', expect: { title: 'Dépassement possible', detail: 'Selon le montant des charges' } },
 ];
 
 // --- Lancement ---
@@ -181,11 +181,11 @@ try {
       check('1re question : les charges', () => assert.equal(first, 'Quel est le montant des charges ?'));
       await answerWith('2000');
       const error = await chrome.evaluate(s, `${root}.querySelector('.question-error')?.textContent`);
-      check('montant de charges impossible refusé', () => assert.equal(error, 'Indiquez un montant de charges inférieur à 1\u202f300\u00a0€.'));
+      check('montant de charges impossible refusé', () => assert.equal(error, 'Indiquez un montant de charges inférieur à 1\u00a0300\u00a0€.'));
       await answerWith('100');
       await sleep(1500);
       const afterCharges = await pill(s);
-      check('charges données : risque calculé', () => assert.deepEqual(afterCharges, { title: 'Risque de dépassement : 31\u00a0%', detail: 'Selon l’époque de construction' }));
+      check('charges données : risque calculé', () => assert.deepEqual(afterCharges, { title: 'Dépassement peu probable', detail: '31\u00a0% de risque, selon l’époque de construction' }));
       const second = await questionText();
       check('2e question : l’époque', () => assert.match(second, /^Le bâtiment date-t-il d’avant \d{4} \?$/));
       await chrome.evaluate(s, `[...${root}.querySelectorAll('.answer')].find((b) => b.textContent === 'Je ne sais pas').click()`);
@@ -209,7 +209,7 @@ try {
       })()`);
       await sleep(1500);
       const exact = await pill(s);
-      check('adresse choisie : un seul quartier', () => assert.deepEqual(exact, { title: 'Risque de dépassement : 21\u00a0%', detail: 'Selon l’époque de construction' }));
+      check('adresse choisie : un seul quartier', () => assert.deepEqual(exact, { title: 'Dépassement peu probable', detail: '21\u00a0% de risque, selon l’époque de construction' }));
       const resume = await chrome.evaluate(s, `${root}.querySelector('.body .link')?.textContent ?? null`);
       check('questions passées : « Reprendre les questions »', () => assert.equal(resume, 'Reprendre les questions'));
       await chrome.screenshot(s, join(OUT, `${prefix}-panneau-fin.png`));

@@ -32,6 +32,8 @@
     alert: ['M12 8v5', 'M12 16.5v.5', 'M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'],
     // Panneau « stop » : loyer au-dessus du plafond, distinct du triangle d'avertissement (dépassement possible).
     stop: ['M12 7.5v5', 'M12 16v.5', 'M7.86 2h8.28L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86z'],
+    info: ['M12 11v5', 'M12 7.5v.5', 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z'],
+    offline: ['M3 3l18 18', 'M5.8 5.8A7 7 0 0 0 9 19h8.5c.5 0 .9-.1 1.3-.2', 'M21.5 16.5A4.5 4.5 0 0 0 17.5 10h-1.8A7 7 0 0 0 10 5.1'],
     help: ['M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6', 'M12 17v.5', 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z'],
   };
 
@@ -51,15 +53,15 @@
   const safeUrl = (url) => (/^https:\/\//i.test(String(url || '')) ? url : null);
   const euroFmt = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
   const m2Fmt = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const eur = (n) => `${euroFmt.format(n)}\u00a0€`;
-  const perM2 = (n) => `${m2Fmt.format(n)}\u00a0€/m²`;
-  const m2 = (n) => `${euroFmt.format(n)}\u00a0m²`;
+  const nb = (s) => s.replace(/\u202f/g, '\u00a0');
+  const eur = (n) => `${nb(euroFmt.format(n))}\u00a0€`;
+  const perM2 = (n) => `${nb(m2Fmt.format(n))}\u00a0€/m²`;
+  const m2 = (n) => `${nb(euroFmt.format(n))}\u00a0m²`;
 
   /** Pourcentage arrondi, jamais 0 % ni 100 % pour un verdict qui reste incertain. */
   const percent = (p) => `${Math.min(99, Math.max(1, Math.round(p * 100)))}\u00a0%`;
 
-  /** « de » devant une liste : « du montant des charges », « de l'époque… ». */
-  const ofFr = (text) => (text.startsWith('le ') ? `du ${text.slice(3)}` : `de ${text}`);
+  const riskLevel = (p) => (p == null ? 'Dépassement possible' : p >= 0.67 ? 'Dépassement probable' : p >= 0.33 ? 'Dépassement possible' : 'Dépassement peu probable');
 
   function joinFr(list) {
     if (list.length < 2) return list.join('');
@@ -116,20 +118,20 @@
 
   function summarize(state) {
     if (state.loading) return { tone: 'load', busy: true, title: 'Vérification de l’encadrement…', detail: placeName(state) };
-    if (state.error) return { tone: 'err', title: 'Vérification impossible', detail: state.error };
+    if (state.error) return { tone: 'none', icon: 'offline', title: 'Vérification impossible', detail: state.error };
     const r = state.result;
     if (!r) return { tone: 'info', title: 'Encadrement des loyers', detail: 'Vérifier ce loyer' };
     const v = r.verdict || {};
     switch (r.status) {
       case 'over': {
         const exact = v.ceiling.low === v.ceiling.high;
-        return { tone: 'err', icon: 'stop', title: 'Loyer au-dessus du plafond', detail: `${exact ? '' : 'Au moins '}${eur(v.overBy)} de trop par mois` };
+        return { tone: 'err', icon: 'stop', final: true, title: 'Loyer au-dessus du plafond', detail: `${exact ? '' : 'Au moins '}${eur(v.overBy)} de trop par mois` };
       }
       case 'under':
-        return { tone: 'ok', title: 'Loyer conforme à l’encadrement', detail: `Plafond : ${eur(v.ceiling.low)} hors charges` };
+        return { tone: 'ok', icon: 'check', final: true, title: 'Loyer conforme', detail: `${eur(v.margin)} sous le plafond` };
       case 'depends':
-        if (v.probability != null) return { tone: 'wait', title: `Risque de dépassement : ${percent(v.probability)}`, detail: v.spread.length ? `Selon ${SPREAD[v.spread[0]]}` : 'À préciser' };
-        return { tone: 'wait', title: 'Peut dépasser le plafond', detail: v.spread.length ? `Selon ${SPREAD[v.spread[0]]}` : 'À préciser' };
+        return { tone: 'wait', icon: 'alert', title: riskLevel(v.probability),
+          detail: [v.probability != null ? `${percent(v.probability)} de risque` : null, v.spread.length ? `selon ${SPREAD[v.spread[0]]}` : null].filter(Boolean).join(', ').replace(/^s/, 'S') || 'À préciser' };
       case 'incomplete':
         return { tone: 'info', title: 'Loyer encadré : à compléter', detail: v.missing?.length ? `Précisez ${MISSING[v.missing[0]]}` : 'Informations manquantes' };
       case 'nosource':
@@ -184,20 +186,21 @@
     const at = (x) => Math.round(((x - from) / (to - from)) * 1000) / 10;
     const [a, b, r] = [at(low), at(high), at(rent)];
     const mid = (a + b) / 2;
+    const exact = low === high;
     const tone = status === 'over' ? 'err' : status === 'under' ? 'ok' : 'wait';
-    const rentText = `${unsure ? '≤\u00a0' : ''}${eur(rent)}`;
-    const ceilingText = low === high ? eur(high) : `${euroFmt.format(low)} à ${eur(high)}`;
-    const label = `Loyer hors charges : ${unsure ? 'au plus ' : ''}${eur(rent)}. Plafond légal : ${low === high ? eur(high) : `entre ${eur(low)} et ${eur(high)}`}.`;
-    // Les étiquettes sont décalées de leur propre position (translateX(-x %)) : elles restent dans la jauge aux extrémités.
-    return h('div', { class: `gauge tone-${tone}`, role: 'img', 'aria-label': label },
+    const rentText = unsure ? `Au plus ${eur(rent)}` : `Loyer ${eur(rent)}`;
+    const ceilingText = exact ? `Plafond ${eur(high)}` : `Plafond incertain : ${nb(euroFmt.format(low))} à ${eur(high)}`;
+    const label = `Loyer hors charges : ${unsure ? 'au plus ' : ''}${eur(rent)}. Plafond légal : ${exact ? eur(high) : `entre ${eur(low)} et ${eur(high)}`}.`;
+    return h('div', { class: `gauge tone-${tone}`, role: 'img', 'aria-label': label, style: `--a: ${a}%; --b: ${b}%; --r: ${r}%` },
       h('div', { class: 'gauge-labels' },
-        h('span', { class: 'gauge-rent', style: `left: ${r}%; transform: translateX(-${r}%)` }, `Loyer ${rentText}`)),
-      h('div', { class: 'gauge-track', style: `--a: ${a}%; --b: ${b}%` },
-        h('span', { class: low === high ? 'gauge-band is-exact' : 'gauge-band' }),
-        h('span', { class: 'gauge-thumb', style: `left: ${r}%` })),
+        h('span', { class: 'gauge-rent', style: `left: ${r}%; transform: translateX(-${r}%)` }, rentText)),
+      h('div', { class: 'gauge-track' },
+        h('span', { class: exact ? 'gauge-band is-exact' : 'gauge-band' }),
+        unsure ? h('span', { class: 'gauge-tail' }) : null,
+        h('span', { class: 'gauge-needle' })),
       h('div', { class: 'gauge-labels' },
-        h('span', { class: 'gauge-ceiling', style: `left: ${mid}%; transform: translateX(-${mid}%)` }, `Plafond ${ceilingText}`)),
-      h('div', { class: 'gauge-caption' }, low === high ? 'Montants mensuels hors charges' : 'Montants mensuels hors charges. Hachures : plafond encore incertain.'));
+        h('span', { class: 'gauge-ceiling', style: `left: ${exact ? b : mid}%; transform: translateX(-${exact ? b : mid}%)` }, ceilingText)),
+      h('div', { class: 'gauge-caption' }, 'Montants par mois, hors charges'));
   }
 
   function headline(r) {
@@ -210,29 +213,25 @@
       case 'under':
         return ['ok', 'check', 'Loyer conforme à l’encadrement', `Il reste ${eur(v.margin)} sous le plafond.`];
       case 'depends':
-        if (v.probability != null) {
-          return ['wait', 'alert', `Risque de dépassement : ${percent(v.probability)}`, `Le plafond dépend ${ofFr(joinFr(v.spread.map((k) => SPREAD[k])))}.`];
-        }
-        return ['wait', 'alert', 'Peut dépasser le plafond',
-          `Le verdict dépend ${ofFr(joinFr(v.spread.map((k) => SPREAD[k])))}. ${v.question ? 'Répondez aux questions ci-dessous.' : 'Précisez-le ci-dessous.'}`];
+        return ['wait', 'alert', riskLevel(v.probability), `Selon ${joinFr(v.spread.map((k) => SPREAD[k]))}.`];
       case 'incomplete':
-        return ['info', 'help', 'Informations manquantes', `Indiquez ${joinFr((v.missing || []).map((k) => MISSING[k]))} pour calculer le plafond.`];
+        return ['info', 'info', 'Informations manquantes', `Indiquez ${joinFr((v.missing || []).map((k) => MISSING[k]))} pour calculer le plafond.`];
       case 'nosource':
-        return ['info', 'help', `Loyer encadré à ${r.territory.name}`,
+        return ['info', 'info', `Loyer encadré à ${r.territory.name}`,
           `${r.territory.partial ? 'L’encadrement s’applique à tout ou partie de cette commune. ' : ''}Check mon loyer ne calcule pas encore le plafond de ce territoire : vérifiez-le sur le simulateur officiel.`];
       case 'nodata':
-        return ['info', 'help', 'Grille introuvable', 'Le service de données ne renvoie pas de loyer de référence pour cette adresse. Vérifiez-la, ou consultez le simulateur officiel.'];
+        return ['info', 'info', 'Grille introuvable', 'Le service de données ne renvoie pas de loyer de référence pour cette adresse. Vérifiez-la, ou consultez le simulateur officiel.'];
       case 'notcovered':
         return ['none', 'home', 'Pas d’encadrement des loyers ici',
           `${r.place?.city ? `${r.place.city} n’applique` : 'Cette commune n’applique'} pas l’encadrement du niveau des loyers. En zone tendue, le loyer ne peut en principe pas augmenter entre deux locataires.`];
       case 'nolocation':
-        return ['info', 'help', 'Adresse introuvable', r.addressNotFound
+        return ['info', 'info', 'Adresse introuvable', r.addressNotFound
           ? `« ${r.addressNotFound} » n’a pas été trouvée dans la Base Adresse Nationale. Vérifiez l’orthographe, ajoutez le code postal et la ville.`
           : 'Indiquez l’adresse ou la ville du logement ci-dessous.'];
       case 'roomshare':
         return ['none', 'home', 'Colocation', 'Les baux de colocation et les chambres ne sont pas encore vérifiés par Check mon loyer.'];
       default:
-        return ['info', 'help', 'Encadrement des loyers', ''];
+        return ['info', 'info', 'Encadrement des loyers', ''];
     }
   }
 
@@ -476,7 +475,7 @@
       const city = state.result?.place?.city || '';
       const input = h('input', isAddress
         ? { type: 'text', name: 'answer', placeholder: `Ex. 12 rue Victor-Hugo${city ? `, ${city}` : ''}`, value: state.inputs?.location?.address || '', 'aria-labelledby': `cml-q-${question.topic}` }
-        : { type: 'number', name: 'answer', min: '0', step: '1', inputmode: 'decimal', placeholder: '€', 'aria-labelledby': `cml-q-${question.topic}` });
+        : { type: 'number', name: 'answer', min: '0', step: '1', inputmode: 'decimal', 'aria-labelledby': `cml-q-${question.topic}`, 'aria-describedby': `cml-q-${question.topic}-u` });
       const error = h('p', { class: 'question-error', role: 'alert', hidden: true });
       const fail = (message) => {
         error.textContent = message;
@@ -503,19 +502,18 @@
           return submit(value);
         },
       },
-      isAddress ? withSuggestions(input, handlers, (item) => submit(item.label)) : input,
-      question.unit ? h('span', { class: 'question-unit' }, question.unit) : null,
-      h('button', { class: 'answer', type: 'submit' }, 'Valider'));
-      return h('div', { class: 'question' }, head, form, error,
+      isAddress ? withSuggestions(input, handlers, (item) => submit(item.label)) : h('span', { class: 'with-unit' }, input, h('span', { class: 'question-unit', id: `cml-q-${question.topic}-u` }, '€ / mois')),
+      h('button', { class: 'answer', type: 'submit' }, 'Valider'), isAddress ? null : skip);
+      return h('div', { class: 'question', role: 'group', 'aria-labelledby': `cml-q-${question.topic}` }, head, form, error,
         isAddress && city && handlers.suggestAddress ? h('p', { class: 'question-hint' }, `Suggestions limitées à ${city}.`) : null,
-        h('div', { class: 'question-actions' }, skip));
+        isAddress ? h('div', { class: 'question-actions' }, skip) : null);
     }
 
     const choices = question.type === 'choice'
       ? question.options.map(([value, label]) => h('button', { class: 'answer', type: 'button', onclick: () => answer({ [question.topic]: value }) }, label))
       : [h('button', { class: 'answer', type: 'button', onclick: () => answer(question.yes) }, 'Oui'),
         h('button', { class: 'answer', type: 'button', onclick: () => answer(question.no) }, 'Non')];
-    return h('div', { class: 'question' }, head, h('div', { class: 'question-actions' }, choices, skip));
+    return h('div', { class: 'question', role: 'group', 'aria-labelledby': `cml-q-${question.topic}` }, head, h('div', { class: 'question-actions' }, choices, skip));
   }
 
   function renderVerdict(state, handlers = {}) {
@@ -529,12 +527,13 @@
     if (!gauge && v.perM2) lines.push(['Maximum légal', ceilingLine(v, inputs).replace(/^Plafond : /, '')]);
     const announced = inputs.announcedCeiling;
     const out = [
-      h('div', { class: `verdict tone-${tone}` },
-        h('div', { class: 'verdict-icon' }, icon(ico, 18)),
-        h('div', { class: 'verdict-text' }, h('div', { class: 'verdict-title' }, title), text ? h('p', null, text) : null,
-          v.probability != null ? h('div', { class: 'meter', role: 'img', 'aria-label': `Risque de dépassement : ${percent(v.probability)}` },
-            h('span', { class: 'meter-fill', style: `width: ${Math.round(v.probability * 100)}%` })) : null)),
-      gauge ? renderGauge(v, r.status) : null,
+      h('div', { class: `verdict tone-${tone}${['over', 'under'].includes(r.status) ? ' is-final' : ''}` },
+        h('div', { class: 'verdict-head' },
+          h('div', { class: 'verdict-icon' }, icon(ico, 16)),
+          h('div', { class: 'verdict-title', tabindex: '-1', role: 'heading', 'aria-level': '2' }, title),
+          v.probability != null ? h('span', { class: 'risk', title: 'Part des cas possibles où le loyer dépasse le plafond' }, `Risque ${percent(v.probability)}`) : null),
+        text ? h('p', null, text) : null,
+        gauge ? renderGauge(v, r.status) : null),
       v.question ? renderQuestion(v.question, state, handlers) : null,
       // Toutes les questions passées : on peut les reprendre.
       r.status === 'depends' && !v.question && inputs.listing?.skipped?.length
@@ -571,7 +570,7 @@
       out.push(h('details', { class: 'facts' }, h('summary', null, 'Détail du calcul'), h('ul', null, facts.map((f) => h('li', null, f)))));
     }
     const official = safeUrl(r.territory?.officialUrl);
-    if (official && r.status !== 'under') out.push(h('a', { class: 'cta', href: official, target: '_blank', rel: 'noopener noreferrer' }, 'Simulateur et informations officielles', icon('external', 14)));
+    if (official && r.status !== 'under') out.push(h('a', { class: v.question ? 'cta secondary' : 'cta', href: official, target: '_blank', rel: 'noopener noreferrer' }, 'Simulateur et informations officielles', icon('external', 14)));
     return out;
   }
 
@@ -634,19 +633,41 @@
     return h('details', { class: 'edit', open }, h('summary', null, 'Corriger ou compléter les informations'), form);
   }
 
+  const liveRegions = new WeakMap();
+
   /** Verdict + formulaire, dans le panneau comme dans la fenêtre de l'extension. */
   function renderResult(container, state, handlers, options = {}) {
+    const root = container.getRootNode();
+    const hadFocus = container.contains(root.activeElement);
+    // Recalcul après une réponse : le verdict précédent reste affiché, grisé, au lieu d'être remplacé par une ligne.
+    const busy = Boolean(state.loading && state.result && container.querySelector('.verdict'));
+    container.classList.toggle('is-busy', busy);
+    container.setAttribute('aria-busy', String(Boolean(state.loading)));
+    if (busy) {
+      container.querySelectorAll('button, input').forEach((el) => el.setAttribute('aria-disabled', 'true'));
+      const head = container.querySelector('.verdict-head');
+      if (head && !head.querySelector('.spinner')) head.append(h('span', { class: 'spinner', 'aria-hidden': 'true' }));
+      return;
+    }
     const parts = [];
     if (state.loading) parts.push(h('div', { class: 'loading' }, h('span', { class: 'spinner' }), 'Vérification auprès des données publiques…'));
-    else if (state.error) parts.push(h('div', { class: 'verdict tone-err' }, h('div', { class: 'verdict-icon' }, icon('alert', 18)),
-      h('div', { class: 'verdict-text' }, h('div', { class: 'verdict-title' }, 'Vérification impossible'), h('p', null, `${state.error}. `,
-        h('button', { class: 'link', type: 'button', onclick: () => handlers.onRefresh?.() }, 'Réessayer')))));
+    else if (state.error) parts.push(h('div', { class: 'verdict tone-none' },
+      h('div', { class: 'verdict-head' }, h('div', { class: 'verdict-icon' }, icon('offline', 16)),
+        h('div', { class: 'verdict-title', tabindex: '-1', role: 'heading', 'aria-level': '2' }, 'Vérification impossible')),
+      h('p', null, `${state.error}. `, h('button', { class: 'link', type: 'button', onclick: () => handlers.onRefresh?.() }, 'Réessayer'))));
     else if (state.result) parts.push(...renderVerdict(state, handlers));
     const status = state.result?.status;
     // Une question est posée : elle suffit, le formulaire complet reste replié.
     const formOpen = options.formOpen ?? (['depends', 'incomplete', 'nolocation', 'nodata'].includes(status) && !state.result?.verdict?.question);
     if (!state.loading && status !== 'roomshare') parts.push(renderForm(state, handlers, { open: formOpen, submitLabel: options.submitLabel }));
-    container.replaceChildren(...parts.filter(Boolean));
+    const live = liveRegions.get(container) || liveRegions.set(container, h('div', { class: 'sr-only', 'aria-live': 'polite', 'aria-atomic': 'true' })).get(container);
+    container.replaceChildren(...parts.filter(Boolean), live);
+    // Nouveau verdict : le focus va à son titre (annoncé par les lecteurs d'écran) au lieu de se perdre ;
+    // sans focus dans le panneau, une région vocale invisible annonce le titre et la phrase du verdict.
+    const title = container.querySelector('.verdict-title');
+    if (hadFocus) title?.focus();
+    live.textContent = '';
+    if (!hadFocus && !state.loading && title) setTimeout(() => { live.textContent = [title.textContent, container.querySelector('.verdict > p')?.textContent].filter(Boolean).join('. '); }, 60);
   }
 
   function listingMeta(listing) {
@@ -695,8 +716,8 @@
     function render() {
       if (!last) return;
       const s = summarize(last);
-      pill.className = `pill tone-${s.tone}`;
-      const pillIcon = s.icon || { ok: 'check', err: 'alert', wait: 'alert' }[s.tone] || 'home';
+      pill.className = `pill tone-${s.tone}${s.final ? ' is-final' : ''}`;
+      const pillIcon = s.icon || { info: 'info' }[s.tone] || 'home';
       pill.replaceChildren(
         h('span', { class: 'pill-icon' }, s.busy ? h('span', { class: 'spinner' }) : icon(pillIcon, 15)),
         h('span', { class: 'pill-text' }, h('span', { class: 'pill-title' }, s.title), s.detail ? h('span', { class: 'pill-detail' }, s.detail) : null));
@@ -757,6 +778,9 @@ button, input, select { font: inherit; color: inherit; }
 .tone-wait .pill-icon { background: var(--wait-bg); color: var(--wait); }
 .tone-info .pill-icon, .tone-load .pill-icon { background: var(--info-bg); color: var(--info); }
 .tone-err .pill-icon { background: var(--err-bg); color: var(--err); }
+.pill.is-final .pill-icon { color: var(--bg); }
+.pill.is-final.tone-ok .pill-icon { background: var(--ok); }
+.pill.is-final.tone-err .pill-icon { background: var(--err); }
 .pill.tone-none { opacity: .88; }
 .is-open .pill { display: none; }
 
@@ -764,7 +788,7 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; animation: rise .16s ease-out; }
 .card[hidden] { display: none; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .card, .tip-pop { animation: none; } .spinner { animation-duration: 2s; } }
+@media (prefers-reduced-motion: reduce) { .body.is-busy .verdict, .body.is-busy .question, .answer:active { transition: none; transform: none; } .card, .tip-pop { animation: none; } .spinner { animation-duration: 2s; } }
 .card-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 0 14px; }
 .brand { display: flex; align-items: center; gap: 7px; font-weight: 700; letter-spacing: .01em; }
 .brand-mark { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: var(--accent-fg); }
@@ -780,50 +804,58 @@ button, input, select { font: inherit; color: inherit; }
 .privacy:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
 .privacy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
-.verdict { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--none-bg); }
-.verdict-icon { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--bg); }
-.verdict-title { font-weight: 700; font-size: 14px; }
-.verdict p { margin: 2px 0 0; }
+.verdict { padding: 10px 12px 12px; border-radius: 10px; background: var(--none-bg); }
+.verdict-head { display: flex; align-items: center; gap: 8px; }
+.verdict-icon { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--bg); }
+.verdict.is-final .verdict-icon { background: currentColor; }
+.verdict.is-final .verdict-icon svg { color: var(--bg); }
+.verdict-title { flex: 1; min-width: 0; font-weight: 700; font-size: 15px; line-height: 1.3; }
+.verdict-title:focus { outline: none; }
+.risk { flex: none; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--wait); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.verdict p { margin: 6px 0 0; }
 .verdict.tone-ok { background: var(--ok-bg); } .verdict.tone-ok .verdict-icon, .verdict.tone-ok .verdict-title { color: var(--ok); }
 .verdict.tone-err { background: var(--err-bg); } .verdict.tone-err .verdict-icon, .verdict.tone-err .verdict-title { color: var(--err); }
 .verdict.tone-wait { background: var(--wait-bg); } .verdict.tone-wait .verdict-icon, .verdict.tone-wait .verdict-title { color: var(--wait); }
 .verdict.tone-info { background: var(--info-bg); } .verdict.tone-info .verdict-icon, .verdict.tone-info .verdict-title { color: var(--info); }
-.verdict-text { flex: 1; min-width: 0; }
-.meter { height: 6px; margin-top: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
-.meter-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--wait), var(--err)); }
-.gauge { padding: 2px 0 0; }
-.gauge-labels { position: relative; height: 20px; }
+.verdict.tone-none .verdict-icon, .verdict.tone-none .verdict-title { color: var(--muted); }
+.gauge { margin-top: 10px; }
+.gauge-labels { position: relative; z-index: 1; height: 22px; }
+.gauge-track + .gauge-labels { z-index: 0; }
 .gauge-labels span { position: absolute; top: 0; white-space: nowrap; font-size: 12px; line-height: 20px; }
-.gauge-rent { padding: 0 7px; border-radius: 6px; font-weight: 700; background: var(--none-bg); color: var(--fg); }
-.gauge.tone-ok .gauge-rent { background: var(--ok-bg); color: var(--ok); }
-.gauge.tone-wait .gauge-rent { background: var(--wait-bg); color: var(--wait); }
-.gauge.tone-err .gauge-rent { background: var(--err-bg); color: var(--err); }
-.gauge-ceiling { color: var(--muted); font-weight: 600; }
-.gauge-track { position: relative; height: 8px; margin: 6px 0; border-radius: 999px;
+.gauge-rent { padding: 0 7px; border-radius: 6px; font-weight: 700; background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent); }
+.gauge-rent::after { content: ''; position: absolute; left: clamp(6px, var(--r), calc(100% - 6px)); bottom: -4px; width: 7px; height: 7px; margin-left: -3.5px;
+  background: inherit; transform: rotate(45deg); box-shadow: 1px 1px 0 0 color-mix(in srgb, currentColor 35%, transparent); }
+.gauge.tone-ok .gauge-rent { color: var(--ok); }
+.gauge.tone-wait .gauge-rent { color: var(--wait); }
+.gauge.tone-err .gauge-rent { color: var(--err); }
+.gauge-ceiling { top: 2px !important; color: var(--fg); font-weight: 600; }
+.gauge-track { position: relative; height: 8px; margin: 2px 0 4px; border-radius: 999px;
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--ok) 38%, transparent) 0 var(--a),
-    transparent var(--a) var(--b),
-    color-mix(in srgb, var(--err) 38%, transparent) var(--b) 100%); }
+    color-mix(in srgb, var(--fg) 10%, var(--bg)) 0 var(--b),
+    color-mix(in srgb, var(--err) 70%, var(--bg)) var(--b) 100%); }
 .gauge-band { position: absolute; top: -3px; bottom: -3px; left: var(--a); width: max(2px, calc(var(--b) - var(--a))); border-radius: 3px;
-  background: repeating-linear-gradient(135deg, var(--wait) 0 2px, color-mix(in srgb, var(--wait) 30%, transparent) 2px 6px); }
-.gauge-band.is-exact { background: var(--fg); border-radius: 1px; }
-.gauge-thumb { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
-  border: 3px solid var(--bg); background: var(--fg); box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, .25); }
-.gauge.tone-ok .gauge-thumb { background: var(--ok); }
-.gauge.tone-wait .gauge-thumb { background: var(--wait); }
-.gauge.tone-err .gauge-thumb { background: var(--err); }
-.gauge-caption { margin-top: 4px; color: var(--muted); font-size: 12px; }
-.question { position: relative; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
-.question-text { font-weight: 650; }
-.question-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
-.question-form { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  background: repeating-linear-gradient(135deg, var(--wait) 0 2px, color-mix(in srgb, var(--wait) 22%, var(--bg)) 2px 6px); }
+.gauge-band.is-exact { width: 2px; margin-left: -1px; top: -4px; bottom: -4px; background: var(--muted); border-radius: 1px; }
+.gauge-tail { position: absolute; top: 0; bottom: 0; right: calc(100% - var(--r)); width: 26%; border-radius: 999px 0 0 999px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--wait) 75%, transparent)); }
+.gauge-needle { position: absolute; left: var(--r); top: -8px; bottom: -6px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--fg); box-shadow: 0 0 0 2px var(--bg); }
+
+.gauge-caption { margin-top: 0; color: var(--muted); font-size: 12px; }
+.question { position: relative; padding: 2px 2px 12px; border-bottom: 1px solid var(--line); }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.question-text { font-weight: 650; font-size: 14px; }
+.question-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.question-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.with-unit { position: relative; flex: 1; min-width: 120px; }
+.with-unit .question-unit { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.with-unit input { padding-right: 58px !important; }
 .question-form > input, .combo { flex: 1; min-width: 0; }
-.question-form input { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); }
+.question-form input { width: 100%; min-height: 36px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); }
 .question-form input[aria-invalid="true"] { border-color: var(--err); }
 .question-unit { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .question-error { margin: 4px 0 0; color: var(--err); font-size: 12px; font-weight: 600; }
 .question-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
-.tip { margin-top: 2px; }
+.tip { margin: 0 0 0 -4px; }
 .combo { position: relative; }
 .suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 4; max-height: 232px; overflow-y: auto; margin: 0; padding: 4px;
   list-style: none; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); box-shadow: var(--shadow); }
@@ -834,7 +866,7 @@ button, input, select { font: inherit; color: inherit; }
 .suggest .suggest-empty { color: var(--muted); cursor: default; }
 .suggest .suggest-empty:hover { background: none; }
 .tip-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 4px; border: 0; background: none; color: var(--accent);
-  font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+  font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; min-height: 30px; }
 .tip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .tip-pop { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 3; overflow-y: auto; padding: 10px 12px;
   border: 1px solid var(--line); border-radius: 10px; background: var(--bg); box-shadow: var(--shadow); font-size: 12px; line-height: 1.45; animation: rise .14s ease-out; }
@@ -847,10 +879,12 @@ button, input, select { font: inherit; color: inherit; }
 .tip-pop li + li { margin-top: 3px; }
 .tip-pop a { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; }
 .tip-pop a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.answer { min-width: 64px; padding: 6px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--bg); color: var(--accent); font-weight: 600; cursor: pointer; }
+.answer { position: relative; min-width: 64px; min-height: 36px; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 8px; background: var(--bg); color: var(--accent); font-weight: 600; cursor: pointer; }
 .answer:hover { background: var(--accent); color: var(--accent-fg); }
-.answer.secondary { border-color: var(--line); color: var(--muted); font-weight: 500; }
+.answer::after { content: ''; position: absolute; inset: -4px; }
+.answer.secondary { border-color: color-mix(in srgb, var(--fg) 28%, transparent); color: var(--fg); font-weight: 500; }
 .answer.secondary:hover { background: var(--bg); border-color: var(--muted); color: var(--fg); }
+.answer:active { transform: translateY(1px); }
 .answer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .figures { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
 .figures dt { color: var(--muted); }
@@ -868,10 +902,15 @@ button, input, select { font: inherit; color: inherit; }
 .field-hint { font-size: 11px; color: var(--muted); }
 .field input, .field select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); }
 .resume { align-self: flex-start; }
+.body.is-busy .verdict, .body.is-busy .question { opacity: .55; transition: opacity .15s ease-out; }
+.body.is-busy [aria-disabled="true"] { pointer-events: none; }
+.verdict-head .spinner { flex: none; color: var(--muted); }
 .link { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
 .cta { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; background: var(--accent); color: var(--accent-fg);
   font-weight: 600; font-size: 12.5px; text-decoration: none; }
 .cta:hover, .primary:hover { filter: brightness(1.08); }
+.cta.secondary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cta.secondary:hover { filter: none; background: var(--soft); }
 .primary { align-self: flex-start; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font-weight: 600; cursor: pointer; }
 .loading { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .spinner { width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
