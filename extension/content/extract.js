@@ -415,14 +415,39 @@
     }
   }
 
-  /** Ce que l'extension lit sur la page, à copier depuis la fenêtre de l'extension quand une annonce n'est pas reconnue. */
+  // Masquage du diagnostic : il peut être collé dans un ticket public, sans les coordonnées de l'annonceur.
+  const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+  const PHONE_FR = /(?:(?:\+|\b00)\s?33\s?(?:\(0\)\s?)?|\b0)[1-9](?:[\s.-]?\d{2}){4}\b/g;
+  const PHONE_INTL = /\+\d{1,3}(?:[\s.-]?\d){7,12}\b/g;
+  const URL_SECRET = /([?&](?:access_token|api_?key|key|token|signature|sig)=)[^&\s"']+/gi;
+
+  /** Texte sans e-mails, numéros de téléphone ni clés d'accès dans les adresses web. */
+  function redact(text) {
+    return String(text)
+      .replace(URL_SECRET, '$1[masqué]')
+      .replace(EMAIL, '[e-mail masqué]')
+      .replace(PHONE_FR, '[téléphone masqué]')
+      .replace(PHONE_INTL, '[téléphone masqué]');
+  }
+
+  const redactAll = (value) => {
+    if (typeof value === 'string') return redact(value);
+    if (Array.isArray(value)) return value.map(redactAll);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redactAll(v)]));
+    return value;
+  };
+
+  /**
+   * Ce que l'extension lit sur la page, à copier depuis la fenêtre de l'extension quand une annonce n'est pas reconnue.
+   * Les e-mails, téléphones et clés d'accès sont masqués.
+   */
   function diagnose(doc, loc) {
     const page = gatherPage(doc, loc);
     const txt = fromText(page);
     const ld = fromJsonLd(page);
     const types = [];
     for (const data of page.jsonld) walk(data, (node) => { if (node['@type']) types.push([].concat(node['@type']).join('/')); });
-    return {
+    return redactAll({
       url: page.url,
       title: page.title,
       h1: page.h1,
@@ -443,8 +468,8 @@
       },
       listing: parseListing(page),
       bodyStart: page.body.slice(0, 1500),
-    };
+    });
   }
 
-  globalThis.LoyerExtract = { extractListing, parseListing, gatherPage, parseAmount, diagnose };
+  globalThis.LoyerExtract = { extractListing, parseListing, gatherPage, parseAmount, diagnose, redact };
 })();

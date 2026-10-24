@@ -45,6 +45,7 @@
     return svg;
   }
 
+  const POLICY_URL = 'https://github.com/Bublex/check-mon-loyer/blob/main/CONFIDENTIALITE.md';
   const safeUrl = (url) => (/^https:\/\//i.test(String(url || '')) ? url : null);
   const euroFmt = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
   const m2Fmt = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -674,7 +675,7 @@
       headEl,
       bodyEl,
       h('footer', { class: 'card-foot' },
-        h('span', { class: 'privacy', title: 'Seule la localisation du logement est envoyée aux services publics de données' }, icon('lock', 12), 'Sans compte ni statistiques'),
+        h('a', { class: 'privacy', href: POLICY_URL, target: '_blank', rel: 'noopener noreferrer', title: 'Seule la localisation du logement est envoyée aux services publics de données. Politique de confidentialité' }, icon('lock', 12), 'Sans compte ni statistiques'),
         h('button', { class: 'link', type: 'button', onclick: () => handlers.onHideSite?.() }, 'Masquer sur ce site')));
     const wrap = h('div', { class: 'wrap', 'data-pos': position }, card, pill);
     root.append(wrap);
@@ -773,7 +774,9 @@ button, input, select { font: inherit; color: inherit; }
 .listing-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .body { overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
 .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 14px; border-top: 1px solid var(--line); background: var(--soft); color: var(--muted); font-size: 11.5px; }
-.privacy { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.privacy { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: inherit; text-decoration: none; }
+.privacy:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
+.privacy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
 .verdict { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--none-bg); }
 .verdict-icon { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--bg); }

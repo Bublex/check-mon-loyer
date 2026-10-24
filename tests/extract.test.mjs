@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import '../extension/content/extract.js';
 
-const { parseListing, parseAmount } = globalThis.LoyerExtract;
+const { parseListing, parseAmount, redact } = globalThis.LoyerExtract;
 
 const page = (over) => ({ url: '', host: '', title: '', h1: '', ogTitle: '', description: '', jsonld: [], nextData: null, body: '', maps: [], flags: {}, ...over });
 
@@ -134,4 +134,12 @@ test('Pages ignorées : résultats de recherche, vente, parking', () => {
   assert.equal(parseListing(page({ url: 'https://www.seloger.com/list.htm?types=1', host: 'seloger.com', h1: 'Location appartement Paris', body: '1 200 € 2 pièces 40 m² …' })), null);
   assert.equal(parseListing(page({ url: 'https://www.example-immo.fr/bien/1', host: 'example-immo.fr', h1: 'Vente appartement 3 pièces 70 m² Paris 15e', body: 'Prix : 650 000 €' })), null);
   assert.equal(parseListing(page({ url: 'https://www.example-immo.fr/bien/2', host: 'example-immo.fr', h1: 'Location parking Paris 11e - 120 € / mois' })), null);
+});
+
+test('Diagnostic : téléphones, e-mails et clés d’accès masqués, montants intacts', () => {
+  const text = 'Contact : 06 12 34 56 78, 01.45.67.89.10, +33 (0)6 12 34 56 78, 0033 1 45 67 89 10, +44 20 7946 0958 ou jean.dupont@exemple.fr. Loyer 1 300 € pour 40 m², annonce 2981234567.';
+  assert.equal(redact(text), 'Contact : [téléphone masqué], [téléphone masqué], [téléphone masqué], [téléphone masqué], [téléphone masqué] ou [e-mail masqué]. Loyer 1 300 € pour 40 m², annonce 2981234567.');
+  assert.equal(redact('https://api.mapbox.com/styles/v1/x/static/2.37,48.86,15/600x400?access_token=pk.abc123&logo=false'),
+    'https://api.mapbox.com/styles/v1/x/static/2.37,48.86,15/600x400?access_token=[masqué]&logo=false');
+  assert.equal(redact('https://maps.googleapis.com/maps/api/staticmap?center=48.86,2.37&key=AIzaSy123'), 'https://maps.googleapis.com/maps/api/staticmap?center=48.86,2.37&key=[masqué]');
 });

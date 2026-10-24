@@ -51,6 +51,8 @@ Si une annonce n'est pas reconnue, la fenêtre de l'extension propose **Copier l
 - Seule la **localisation du logement** part vers des services publics : la Géoplateforme de l'IGN (géocodage de l'adresse ou du quartier, îlots IRIS), puis le service du territoire concerné (Ville de Paris, Métropole de Lyon, Montpellier Méditerranée Métropole) et le catalogue data.gouv.fr. Pour Bordeaux, la grille et les zones sont dans l'extension : seuls le géocodage et les îlots IRIS passent par le réseau. Les suggestions d'adresses envoient le texte saisi (à partir de 3 caractères) et la ville du logement au géocodeur de la Géoplateforme. Les requêtes partent sans cookies et sans en-tête `Referer` : ces services ne voient pas l'annonce consultée.
 - Les résultats sont gardés 15 minutes en mémoire, les grilles 24 heures.
 - La seule donnée enregistrée est la liste des sites où vous avez masqué la pastille (`chrome.storage.local`).
+- Le diagnostic (« Copier le diagnostic ») reste dans le presse-papiers ; les téléphones, e-mails et clés d'accès y sont masqués.
+- Détail complet : [politique de confidentialité](CONFIDENTIALITE.md), à indiquer dans la fiche du Chrome Web Store.
 
 ## Comment ça marche
 
