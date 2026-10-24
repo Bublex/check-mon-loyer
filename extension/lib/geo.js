@@ -39,6 +39,45 @@ export async function geocode(query, { postcode, citycode, signal } = {}) {
   return { ...place, radius: RADIUS[place.type] ?? RADIUS.municipality };
 }
 
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => String(a + i));
+
+/** Codes INSEE d'une même ville : Paris, Lyon et Marseille avec tous leurs arrondissements. */
+export function cityCodes(citycode) {
+  const n = Number(citycode);
+  if (n === 75056 || (n >= 75101 && n <= 75120)) return ['75056', ...range(75101, 75120)];
+  if (n === 69123 || (n >= 69381 && n <= 69389)) return ['69123', ...range(69381, 69389)];
+  if (n === 13055 || (n >= 13201 && n <= 13216)) return ['13055', ...range(13201, 13216)];
+  return citycode ? [String(citycode)] : [];
+}
+
+/**
+ * Suggestions d'adresses pendant la saisie, limitées à la ville du logement quand elle est connue
+ * (filtre du géocodeur pour une commune, tri par proximité et filtrage ici pour une ville à arrondissements).
+ */
+export async function suggestAddresses(text, { citycode, city, lat, lon } = {}, { signal } = {}) {
+  const q = String(text || '').trim();
+  if (q.length < 3) return [];
+  const codes = cityCodes(citycode);
+  const params = new URLSearchParams({ q, autocomplete: '1', limit: '15' });
+  if (codes.length === 1) params.set('citycode', codes[0]);
+  else if (codes.length) {
+    if (city && !q.toLowerCase().includes(city.toLowerCase())) params.set('q', `${q} ${city}`);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      params.set('lat', lat.toFixed(5));
+      params.set('lon', lon.toFixed(5));
+    }
+  }
+  const url = `${GEOCODER}/search?${params}`;
+  const data = await cached(url, DAY, () => requestJson(url, { signal }));
+  const seen = new Set();
+  return (data?.features || [])
+    .map(toPlace)
+    .filter((p) => p && p.type !== 'municipality' && (!codes.length || codes.includes(p.citycode)))
+    .filter((p) => !seen.has(p.label) && seen.add(p.label))
+    .slice(0, 6)
+    .map((p) => ({ label: p.label, type: p.type }));
+}
+
 /** Commune (code INSEE, arrondissement pour Paris, Lyon et Marseille) d'un point. */
 export async function reverse(lat, lon, { signal } = {}) {
   const url = `${GEOCODER}/reverse?${new URLSearchParams({ lat: lat.toFixed(6), lon: lon.toFixed(6), limit: '1' })}`;

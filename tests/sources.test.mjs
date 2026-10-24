@@ -3,6 +3,7 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mockFetch, square, geocoderFeature, makeXlsx, parisRecords, montpellierSheet } from './helpers.mjs';
 import { checkListing } from '../extension/lib/check.js';
+import { suggestAddresses, cityCodes } from '../extension/lib/geo.js';
 import { currentGrid, parisRowsFromRecords } from '../extension/lib/sources/paris.js';
 import { lyonRowsFromFeature, latestTypename } from '../extension/lib/sources/lyon.js';
 import { montpellierGrid } from '../extension/lib/sources/montpellier.js';
@@ -223,4 +224,28 @@ test('Adresse saisie : retenue si elle est trouvée, signalée sinon (sans calcu
 
 test('Sans localisation', async () => {
   assert.equal((await checkListing({ listing: listing(), location: {} })).status, 'nolocation');
+});
+
+test('Suggestions d’adresses : limitées à la ville du logement, arrondissements compris', async () => {
+  assert.equal(cityCodes('69383').length, 10);
+  assert.deepEqual(cityCodes('33063'), ['33063']);
+  mock = mockFetch([[/geocodage\/search/, { features: [
+    geocoderFeature({ lon: 2.37, lat: 48.86, citycode: '75111', postcode: '75011', city: 'Paris', type: 'housenumber', label: '12 Rue Oberkampf 75011 Paris' }),
+    geocoderFeature({ lon: 5.38, lat: 43.3, citycode: '13201', postcode: '13001', city: 'Marseille', type: 'street', label: 'Rue Oberkampf 13001 Marseille' }),
+    geocoderFeature({ lon: 2.35, lat: 48.85, citycode: '75104', postcode: '75004', city: 'Paris', type: 'street', label: 'Rue de Rivoli 75004 Paris' }),
+    geocoderFeature({ lon: 2.35, lat: 48.85, citycode: '75056', city: 'Paris', type: 'municipality', label: 'Paris' }),
+  ] }]]);
+  // Paris : pas de filtre par commune possible (20 arrondissements) ; la ville est ajoutée au texte et le tri se fait par proximité.
+  const paris = await suggestAddresses('12 rue ober', { citycode: '75111', city: 'Paris', lat: 48.8665, lon: 2.3705 });
+  assert.deepEqual(paris.map((p) => p.label), ['12 Rue Oberkampf 75011 Paris', 'Rue de Rivoli 75004 Paris']);
+  const sent = new URL(mock.calls[0]).searchParams;
+  assert.equal(sent.get('q'), '12 rue ober Paris');
+  assert.equal(sent.get('autocomplete'), '1');
+  assert.equal(sent.get('citycode'), null);
+  assert.equal(sent.get('lat'), '48.86650');
+  // Une seule commune : filtre du géocodeur.
+  await suggestAddresses('rue sainte', { citycode: '33063', city: 'Bordeaux' });
+  assert.equal(new URL(mock.calls[1]).searchParams.get('citycode'), '33063');
+  assert.deepEqual(await suggestAddresses('ru', { citycode: '33063' }), [], 'pas de recherche sous 3 caractères');
+  assert.equal(mock.calls.length, 2);
 });

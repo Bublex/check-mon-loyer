@@ -64,7 +64,10 @@ export async function checkListing(input, { signal, today } = {}) {
   const placeInfo = {
     label: place.label,
     city: place.city,
+    citycode: place.citycode,
     postcode: place.postcode,
+    lat: place.lat,
+    lon: place.lon,
     approximate: place.radius > 0,
     radius: place.radius,
     source: place.source,

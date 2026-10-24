@@ -21,7 +21,8 @@ export const TERRITORIES = [
     name: 'Lyon et Villeurbanne',
     source: 'lyon',
     communes: ['69123', ...range(69381, 69389), '69266'],
-    officialUrl: 'https://www.grandlyon.com/mes-services-au-quotidien/se-loger-ameliorer-ou-louer-son-logement/sinformer-sur-lencadrement-des-loyers',
+    // Simulateur de la Métropole de Lyon (Lyon et Villeurbanne).
+    officialUrl: 'https://demarches.toodego.com/logement/encadrement-des-loyers-v2/',
   },
   {
     id: 'montpellier',

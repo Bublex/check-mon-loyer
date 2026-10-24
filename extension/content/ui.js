@@ -55,6 +55,9 @@
   /** Pourcentage arrondi, jamais 0 % ni 100 % pour un verdict qui reste incertain. */
   const percent = (p) => `${Math.min(99, Math.max(1, Math.round(p * 100)))}\u00a0%`;
 
+  /** « de » devant une liste : « du montant des charges », « de l'époque… ». */
+  const ofFr = (text) => (text.startsWith('le ') ? `du ${text.slice(3)}` : `de ${text}`);
+
   function joinFr(list) {
     if (list.length < 2) return list.join('');
     return `${list.slice(0, -1).join(', ')} et ${list[list.length - 1]}`;
@@ -205,10 +208,10 @@
         return ['ok', 'check', 'Loyer conforme à l’encadrement', `Il reste ${eur(v.margin)} sous le plafond.`];
       case 'depends':
         if (v.probability != null) {
-          return ['wait', 'help', `Risque de dépassement : ${percent(v.probability)}`, `Le plafond dépend de ${joinFr(v.spread.map((k) => SPREAD[k]))}.`];
+          return ['wait', 'help', `Risque de dépassement : ${percent(v.probability)}`, `Le plafond dépend ${ofFr(joinFr(v.spread.map((k) => SPREAD[k])))}.`];
         }
         return ['wait', 'help', 'Peut dépasser le plafond',
-          `Le verdict dépend de ${joinFr(v.spread.map((k) => SPREAD[k]))}. Précisez-le ci-dessous.`];
+          `Le verdict dépend ${ofFr(joinFr(v.spread.map((k) => SPREAD[k])))}. ${v.question ? 'Répondez aux questions ci-dessous.' : 'Précisez-le ci-dessous.'}`];
       case 'incomplete':
         return ['info', 'help', 'Informations manquantes', `Indiquez ${joinFr((v.missing || []).map((k) => MISSING[k]))} pour calculer le plafond.`];
       case 'nosource':
@@ -283,6 +286,27 @@
       ],
       sure: [],
     }),
+    charges: () => ({
+      clues: [
+        ['Dans l’annonce', 'cherchez « provisions sur charges », « dont charges » ou « charges : … € ».'],
+        ['Sinon', 'demandez-le à l’agence ou au bailleur : le montant figure dans le bail.'],
+      ],
+      sure: [],
+    }),
+    rooms: () => ({
+      clues: [
+        ['Pièces principales', 'séjour et chambres ; cuisine, salle de bains, WC et couloir ne comptent pas.'],
+        ['T2 ou F2', '2 pièces principales.'],
+      ],
+      sure: [],
+    }),
+    address: () => ({
+      clues: [
+        ['Dans l’annonce', 'la carte situe souvent le logement à quelques rues près ; une photo de façade permet de retrouver l’immeuble sur Street View.'],
+        ['Sinon', 'demandez l’adresse à l’agence ou au bailleur : le numéro et la rue suffisent.'],
+      ],
+      sure: [],
+    }),
   };
 
   let tipCount = 0;
@@ -348,14 +372,147 @@
     return tip;
   }
 
-  /** Question oui/non pour affiner (« Le bâtiment date-t-il d'avant 1946 ? ») : la réponse relance le calcul. */
-  function renderQuestion(question, handlers) {
-    return h('div', { class: 'question' },
-      h('div', { class: 'question-text' }, question.text),
-      h('div', { class: 'question-actions' },
-        h('button', { class: 'answer', type: 'button', onclick: () => handlers.onEdit?.(question.yes) }, 'Oui'),
-        h('button', { class: 'answer', type: 'button', onclick: () => handlers.onEdit?.(question.no) }, 'Non'),
-        renderTip(question)));
+  // --- Suggestions d'adresses ---
+
+  let comboCount = 0;
+
+  /**
+   * Suggestions sous un champ d'adresse (combobox ARIA) : flèches pour parcourir, Entrée pour retenir, Échap pour fermer.
+   * Les adresses viennent de handlers.suggestAddress (Base Adresse Nationale, limitée à la ville du logement).
+   */
+  function withSuggestions(input, handlers, onPick) {
+    if (!handlers.suggestAddress) return input;
+    const id = `cml-suggest-${++comboCount}`;
+    const list = h('ul', { class: 'suggest', id, role: 'listbox', hidden: true });
+    let items = [];
+    let active = -1;
+    let timer = null;
+    let seq = 0;
+    for (const [k, v] of Object.entries({ role: 'combobox', autocomplete: 'off', 'aria-autocomplete': 'list', 'aria-expanded': 'false', 'aria-controls': id })) input.setAttribute(k, v);
+
+    const close = () => {
+      seq++;
+      clearTimeout(timer);
+      list.hidden = true;
+      active = -1;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    };
+    const highlight = (i) => {
+      active = i;
+      [...list.children].forEach((li, j) => li.setAttribute('aria-selected', String(j === i)));
+      if (i >= 0) {
+        input.setAttribute('aria-activedescendant', `${id}-${i}`);
+        list.children[i].scrollIntoView({ block: 'nearest' });
+      }
+    };
+    const pick = (item) => {
+      input.value = item.label;
+      close();
+      onPick?.(item);
+    };
+    const show = ({ items: found = [], city } = {}) => {
+      items = found;
+      active = -1;
+      list.replaceChildren(...(found.length
+        ? found.map((item, i) => h('li', { id: `${id}-${i}`, role: 'option', 'aria-selected': 'false', onmousedown: (e) => { e.preventDefault(); pick(item); } }, item.label))
+        : [h('li', { class: 'suggest-empty', 'aria-disabled': 'true' }, `Aucune adresse trouvée${city ? ` à ${city}` : ''}`)]));
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      input.removeAttribute('aria-activedescendant');
+    };
+
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const n = ++seq;
+      const q = input.value.trim();
+      if (q.length < 3) return close();
+      timer = setTimeout(async () => {
+        const found = await Promise.resolve(handlers.suggestAddress(q)).catch(() => null);
+        if (n === seq && found) show(found);
+      }, 220);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (list.hidden) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (items.length) highlight(e.key === 'ArrowDown' ? (active + 1) % items.length : (active <= 0 ? items.length : active) - 1);
+      } else if (e.key === 'Enter' && active >= 0) {
+        e.preventDefault();
+        pick(items[active]);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+    });
+    input.addEventListener('blur', close);
+    return h('div', { class: 'combo' }, input, list);
+  }
+
+  // --- Questions pour compléter ---
+
+  // Réponse saisie → correction envoyée au calcul.
+  const ANSWERS = {
+    charges: (value) => ({ rent: { charges: value, chargesIncluded: true } }),
+    address: (value) => ({ address: value }),
+  };
+
+  /**
+   * Question pour compléter une information manquante, une à la fois : oui/non (époque, meublé, maison), choix
+   * (pièces), montant (charges) ou adresse. La réponse relance le calcul ; « Je ne sais pas » passe à la suivante.
+   */
+  function renderQuestion(question, state, handlers) {
+    const answer = (edits) => handlers.onEdit?.(edits);
+    const skipped = state.inputs?.listing?.skipped || [];
+    const skip = h('button', { class: 'answer secondary', type: 'button', onclick: () => answer({ skipped: [...skipped, question.topic] }) }, 'Je ne sais pas');
+    const head = [h('div', { class: 'question-text', id: `cml-q-${question.topic}` }, question.text), renderTip(question)];
+
+    if (question.type === 'number' || question.type === 'text') {
+      const isAddress = question.type === 'text';
+      const city = state.result?.place?.city || '';
+      const input = h('input', isAddress
+        ? { type: 'text', name: 'answer', placeholder: `Ex. 12 rue Victor-Hugo${city ? `, ${city}` : ''}`, value: state.inputs?.location?.address || '', 'aria-labelledby': `cml-q-${question.topic}` }
+        : { type: 'number', name: 'answer', min: '0', step: '1', inputmode: 'decimal', placeholder: '€', 'aria-labelledby': `cml-q-${question.topic}` });
+      const error = h('p', { class: 'question-error', role: 'alert', hidden: true });
+      const fail = (message) => {
+        error.textContent = message;
+        error.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+      };
+      const submit = (value) => answer(ANSWERS[question.topic](value));
+      const form = h('form', {
+        class: 'question-form',
+        novalidate: true,
+        onsubmit: (e) => {
+          e.preventDefault();
+          const raw = input.value.trim();
+          if (isAddress) {
+            if (raw.length < 3) return fail('Indiquez au moins le nom de la rue.');
+            return submit(raw);
+          }
+          const value = Number(raw.replace(',', '.'));
+          const amount = state.inputs?.listing?.rent?.amount;
+          if (!raw || !Number.isFinite(value) || value < 0 || (amount && value >= amount)) {
+            return fail(amount ? `Indiquez un montant de charges inférieur à ${eur(amount)}.` : 'Indiquez un montant en euros.');
+          }
+          return submit(value);
+        },
+      },
+      isAddress ? withSuggestions(input, handlers, (item) => submit(item.label)) : input,
+      question.unit ? h('span', { class: 'question-unit' }, question.unit) : null,
+      h('button', { class: 'answer', type: 'submit' }, 'Valider'));
+      return h('div', { class: 'question' }, head, form, error,
+        isAddress && city && handlers.suggestAddress ? h('p', { class: 'question-hint' }, `Suggestions limitées à ${city}.`) : null,
+        h('div', { class: 'question-actions' }, skip));
+    }
+
+    const choices = question.type === 'choice'
+      ? question.options.map(([value, label]) => h('button', { class: 'answer', type: 'button', onclick: () => answer({ [question.topic]: value }) }, label))
+      : [h('button', { class: 'answer', type: 'button', onclick: () => answer(question.yes) }, 'Oui'),
+        h('button', { class: 'answer', type: 'button', onclick: () => answer(question.no) }, 'Non')];
+    return h('div', { class: 'question' }, head, h('div', { class: 'question-actions' }, choices, skip));
   }
 
   function renderVerdict(state, handlers = {}) {
@@ -375,7 +532,10 @@
           v.probability != null ? h('div', { class: 'meter', role: 'img', 'aria-label': `Risque de dépassement : ${percent(v.probability)}` },
             h('span', { class: 'meter-fill', style: `width: ${Math.round(v.probability * 100)}%` })) : null)),
       gauge ? renderGauge(v, r.status) : null,
-      v.question ? renderQuestion(v.question, handlers) : null,
+      v.question ? renderQuestion(v.question, state, handlers) : null,
+      // Toutes les questions passées : on peut les reprendre.
+      r.status === 'depends' && !v.question && inputs.listing?.skipped?.length
+        ? h('button', { class: 'link resume', type: 'button', onclick: () => handlers.onEdit?.({ skipped: [] }) }, 'Reprendre les questions') : null,
       lines.length ? h('dl', { class: 'figures' }, lines.flatMap(([k, val]) => [h('dt', null, k), h('dd', null, val)])) : null,
     ];
     // Ce que l'adresse saisie a donné : l'adresse retenue, ou l'échec du géocodage.
@@ -433,7 +593,7 @@
     else if (choice === 'inferred' || choice === 'current') periodOptions.splice(1, 0, [choice, construction.label || 'Époque précisée']);
 
     const form = h('form', { class: 'form', novalidate: true },
-      field('Adresse du logement', h('input', { name: 'address', type: 'text', autocomplete: 'street-address', placeholder: 'Ex. 12 rue Oberkampf, Paris', value: loc.address || '' }),
+      field('Adresse du logement', withSuggestions(h('input', { name: 'address', type: 'text', autocomplete: 'street-address', placeholder: 'Ex. 12 rue Oberkampf, Paris', value: loc.address || '' }), handlers),
         loc.address ? null : [loc.district, loc.postcode, loc.city].filter(Boolean).join(' ') || null),
       h('div', { class: 'row' },
         field('Surface habitable', h('input', { name: 'surface', type: 'number', min: '1', step: '0.1', inputmode: 'decimal', placeholder: 'm²', value: listing.surface ?? '' })),
@@ -480,7 +640,8 @@
         h('button', { class: 'link', type: 'button', onclick: () => handlers.onRefresh?.() }, 'Réessayer')))));
     else if (state.result) parts.push(...renderVerdict(state, handlers));
     const status = state.result?.status;
-    const formOpen = options.formOpen ?? ['depends', 'incomplete', 'nolocation', 'nodata'].includes(status);
+    // Une question est posée : elle suffit, le formulaire complet reste replié.
+    const formOpen = options.formOpen ?? (['depends', 'incomplete', 'nolocation', 'nodata'].includes(status) && !state.result?.verdict?.question);
     if (!state.loading && status !== 'roomshare') parts.push(renderForm(state, handlers, { open: formOpen, submitLabel: options.submitLabel }));
     container.replaceChildren(...parts.filter(Boolean));
   }
@@ -649,8 +810,24 @@ button, input, select { font: inherit; color: inherit; }
 .gauge-caption { margin-top: 4px; color: var(--muted); font-size: 12px; }
 .question { position: relative; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
 .question-text { font-weight: 650; }
-.question-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.tip { margin-left: auto; }
+.question-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.question-form { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.question-form > input, .combo { flex: 1; min-width: 0; }
+.question-form input { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); }
+.question-form input[aria-invalid="true"] { border-color: var(--err); }
+.question-unit { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.question-error { margin: 4px 0 0; color: var(--err); font-size: 12px; font-weight: 600; }
+.question-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.tip { margin-top: 2px; }
+.combo { position: relative; }
+.suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 4; max-height: 232px; overflow-y: auto; margin: 0; padding: 4px;
+  list-style: none; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); box-shadow: var(--shadow); }
+.suggest[hidden] { display: none; }
+.suggest li { padding: 7px 8px; border-radius: 6px; cursor: pointer; font-size: 12.5px; line-height: 1.35; }
+.suggest li:hover, .suggest li[aria-selected="true"] { background: var(--soft); }
+.suggest li[aria-selected="true"] { box-shadow: inset 2px 0 0 var(--accent); }
+.suggest .suggest-empty { color: var(--muted); cursor: default; }
+.suggest .suggest-empty:hover { background: none; }
 .tip-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 4px; border: 0; background: none; color: var(--accent);
   font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .tip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
@@ -667,6 +844,8 @@ button, input, select { font: inherit; color: inherit; }
 .tip-pop a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .answer { min-width: 64px; padding: 6px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--bg); color: var(--accent); font-weight: 600; cursor: pointer; }
 .answer:hover { background: var(--accent); color: var(--accent-fg); }
+.answer.secondary { border-color: var(--line); color: var(--muted); font-weight: 500; }
+.answer.secondary:hover { background: var(--bg); border-color: var(--muted); color: var(--fg); }
 .answer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .figures { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
 .figures dt { color: var(--muted); }
@@ -683,6 +862,7 @@ button, input, select { font: inherit; color: inherit; }
 .field-label { font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .field-hint { font-size: 11px; color: var(--muted); }
 .field input, .field select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); }
+.resume { align-self: flex-start; }
 .link { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
 .cta { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; background: var(--accent); color: var(--accent-fg);
   font-weight: 600; font-size: 12.5px; text-decoration: none; }

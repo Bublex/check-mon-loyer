@@ -27,6 +27,12 @@ async function run(force = false) {
 
 const handlers = {
   onRefresh: () => run(true),
+  // Suggestions d'adresses : limitées à la ville du dernier calcul quand il y en a un.
+  suggestAddress(q) {
+    const place = state.result?.place;
+    const scope = place?.citycode ? { citycode: place.citycode, city: place.city, lat: place.lat, lon: place.lon } : {};
+    return chrome.runtime.sendMessage({ type: 'suggest', q, scope });
+  },
   onEdit(edits) {
     const location = { ...state.inputs.location };
     if (edits.address) location.address = edits.address;
@@ -36,7 +42,7 @@ const handlers = {
       // Formulaire complet ou simple réponse à une question (« avant 1946 ? ») : seules les valeurs données changent.
       listing: {
         ...state.inputs.listing,
-        ...Object.fromEntries(['surface', 'rooms', 'furnished', 'kind', 'construction'].filter((k) => k in edits).map((k) => [k, edits[k]])),
+        ...Object.fromEntries(['surface', 'rooms', 'furnished', 'kind', 'construction', 'skipped'].filter((k) => k in edits).map((k) => [k, edits[k]])),
         rent: edits.rent ? { ...state.inputs.listing.rent, ...edits.rent, base: null } : state.inputs.listing.rent,
       },
     };
@@ -53,7 +59,8 @@ function render() {
     $('listingMeta').textContent = state.result?.place?.label || [listing.location?.city, listing.location?.postcode].filter(Boolean).join(' ');
   }
   renderResult($('result'), state, handlers, {
-    formOpen: !state.result || ['depends', 'incomplete', 'nolocation', 'nodata'].includes(state.result.status),
+    // Une question est posée : elle suffit, le formulaire complet reste replié.
+    formOpen: !state.result || (['depends', 'incomplete', 'nolocation', 'nodata'].includes(state.result.status) && !state.result.verdict?.question),
     submitLabel: listing ? 'Recalculer' : 'Vérifier ce loyer',
   });
 }

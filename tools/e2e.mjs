@@ -36,6 +36,15 @@ function services(href) {
       : lat > 45 ? place(4.85, 45.76, '69383', '69003', 'Lyon', 'street')
         : place(3.88, 43.61, '34172', '34000', 'Montpellier', 'street');
   }
+  if (url.host === 'data.geopf.fr' && url.pathname === '/geocodage/search' && url.searchParams.get('autocomplete') === '1') {
+    // Suggestions : une adresse hors de Paris doit être écartée par l'extension.
+    if (!/ober/i.test(q)) return json({ features: [] });
+    return json({ features: [
+      geocoderFeature({ lon: 2.3705, lat: 48.8665, citycode: '75111', postcode: '75011', city: 'Paris', type: 'housenumber', label: '12 Rue Oberkampf 75011 Paris' }),
+      geocoderFeature({ lon: 5.38, lat: 43.3, citycode: '13201', postcode: '13001', city: 'Marseille', type: 'street', label: 'Rue Oberkampf 13001 Marseille' }),
+      geocoderFeature({ lon: 2.37, lat: 48.866, citycode: '75111', postcode: '75011', city: 'Paris', type: 'street', label: 'Rue Oberkampf 75011 Paris' }),
+    ] });
+  }
   if (url.host === 'data.geopf.fr' && url.pathname === '/geocodage/search') {
     if (/lyon/i.test(q)) return place(4.85, 45.76, '69383', '69003', 'Lyon 3e Arrondissement', 'municipality');
     if (/montpellier/i.test(q)) return place(3.88, 43.61, '34172', '34000', 'Montpellier', 'municipality');
@@ -43,6 +52,7 @@ function services(href) {
     if (/lib[ée]ration/i.test(q)) return place(-0.6436, 44.8386, '33281', '33700', 'Mérignac', 'housenumber');
     if (/m[ée]rignac/i.test(q)) return place(-0.64, 44.84, '33281', '33700', 'Mérignac', 'municipality');
     if (/oberkampf/i.test(q)) return place(2.3705, 48.8665, '75111', '75011', 'Paris', 'housenumber', '12 Rue Oberkampf 75011 Paris');
+    if (/75011|paris/i.test(q)) return place(2.3772, 48.8651, '75111', '75011', 'Paris', 'municipality', 'Paris 11e Arrondissement');
     return json({ features: [] });
   }
   if (url.host === 'data.geopf.fr' && url.pathname === '/wfs/ows') {
@@ -76,6 +86,7 @@ const PAGES = [
   { url: 'https://www.seloger.com/annonces/253456789.htm', file: 'seloger-bordeaux.html', expect: { title: 'Loyer au-dessus du plafond', detail: 'Au moins 13\u00a0€ de trop par mois' } },
   { url: 'https://www.bienici.com/annonce/location/montpellier/appartement/2pieces/ag340000-1', file: 'bienici-montpellier.html', expect: { title: 'Loyer conforme à l’encadrement', detail: 'Plafond : 720\u00a0€ hors charges' } },
   { url: 'https://www.pap.fr/annonces/appartement-bordeaux-33000-r412345679', file: 'pap-bordeaux.html', expect: { title: 'Loyer au-dessus du plafond', detail: '144\u00a0€ de trop par mois' } },
+  { url: 'https://www.bienici.com/annonce/location/paris-11e/appartement/2pieces/ag750000-7', file: 'bienici-paris.html', expect: { title: 'Peut dépasser le plafond', detail: 'Selon le montant des charges' } },
 ];
 
 // --- Lancement ---
@@ -155,6 +166,53 @@ try {
       const exactNotes = await notes();
       check('adresse retenue affichée', () => assert.match(exactNotes, /Adresse retenue : 12 Rue Oberkampf 75011 Paris\./));
       await chrome.screenshot(s, join(OUT, `${prefix}-panneau-adresse.png`));
+    }
+
+    if (page.file === 'bienici-paris.html') {
+      // Charges inconnues : les questions s'enchaînent (charges, époque passée, adresse avec suggestions limitées à Paris).
+      const root = `document.querySelector('[data-check-mon-loyer]').shadowRoot`;
+      const questionText = () => chrome.evaluate(s, `${root}.querySelector('.question-text')?.textContent ?? null`);
+      const answerWith = (value) => chrome.evaluate(s, `(() => {
+        const form = ${root}.querySelector('.question-form');
+        form.querySelector('input').value = ${JSON.stringify(value)};
+        form.requestSubmit();
+      })()`);
+      const first = await questionText();
+      check('1re question : les charges', () => assert.equal(first, 'Quel est le montant des charges ?'));
+      await answerWith('2000');
+      const error = await chrome.evaluate(s, `${root}.querySelector('.question-error')?.textContent`);
+      check('montant de charges impossible refusé', () => assert.equal(error, 'Indiquez un montant de charges inférieur à 1\u202f300\u00a0€.'));
+      await answerWith('100');
+      await sleep(1500);
+      const afterCharges = await pill(s);
+      check('charges données : risque calculé', () => assert.deepEqual(afterCharges, { title: 'Risque de dépassement : 31\u00a0%', detail: 'Selon l’époque de construction' }));
+      const second = await questionText();
+      check('2e question : l’époque', () => assert.match(second, /^Le bâtiment date-t-il d’avant \d{4} \?$/));
+      await chrome.evaluate(s, `[...${root}.querySelectorAll('.answer')].find((b) => b.textContent === 'Je ne sais pas').click()`);
+      await sleep(1500);
+      const third = await questionText();
+      check('« Je ne sais pas » : question suivante, l’adresse', () => assert.equal(third, 'Quelle est l’adresse exacte du logement ?'));
+      await chrome.evaluate(s, `(() => {
+        const input = ${root}.querySelector('.question-form input');
+        input.focus();
+        input.value = '12 rue ober';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`);
+      await sleep(1000);
+      const suggestions = await chrome.evaluate(s, `[...${root}.querySelectorAll('.suggest li')].map((li) => li.textContent)`);
+      check('suggestions d’adresses limitées à Paris', () => assert.deepEqual(suggestions, ['12 Rue Oberkampf 75011 Paris', 'Rue Oberkampf 75011 Paris']));
+      await chrome.screenshot(s, join(OUT, `${prefix}-suggestions.png`));
+      await chrome.evaluate(s, `(() => {
+        const input = ${root}.querySelector('.question-form input');
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      })()`);
+      await sleep(1500);
+      const exact = await pill(s);
+      check('adresse choisie : un seul quartier', () => assert.deepEqual(exact, { title: 'Risque de dépassement : 21\u00a0%', detail: 'Selon l’époque de construction' }));
+      const resume = await chrome.evaluate(s, `${root}.querySelector('.body .link')?.textContent ?? null`);
+      check('questions passées : « Reprendre les questions »', () => assert.equal(resume, 'Reprendre les questions'));
+      await chrome.screenshot(s, join(OUT, `${prefix}-panneau-fin.png`));
     }
 
     if (page.file === 'seloger-lyon.html') {

@@ -21,7 +21,7 @@
     // Adresse saisie : elle prime sur la position approximative de l'annonce, qui reste le repli si elle est introuvable.
     if (edits.address) where.address = edits.address;
     const rent = { ...listing.rent, ...(edits.rent || {}) };
-    if (edits.rent && edits.rent.amount !== listing.rent.amount) rent.base = null;
+    if (edits.rent && 'amount' in edits.rent && edits.rent.amount !== listing.rent.amount) rent.base = null;
     return {
       listing: {
         surface: edits.surface !== undefined ? edits.surface : listing.surface,
@@ -31,6 +31,8 @@
         construction: edits.construction !== undefined ? edits.construction : listing.construction,
         rent,
         dpe: listing.dpe,
+        // Questions passées (« Je ne sais pas ») : la suivante est proposée.
+        skipped: edits.skipped || [],
       },
       location: where,
       announcedCeiling: listing.announcedCeiling,
@@ -64,9 +66,18 @@
   const handlers = {
     onRefresh: () => run(true),
     onEdit(edits) {
-      state.edits = { ...state.edits, ...edits };
+      // Réponse partielle (les charges seules, par exemple) : le reste du loyer déjà corrigé est gardé.
+      const rent = edits.rent ? { ...state.edits.rent, ...edits.rent } : state.edits.rent;
+      state.edits = { ...state.edits, ...edits, rent };
       state.inputs = inputsFor(state.listing, state.edits);
       run();
+    },
+    // Suggestions d'adresses limitées à la ville du logement (celle trouvée par le calcul, sinon celle de l'annonce).
+    suggestAddress(q) {
+      const place = state?.result?.place;
+      const loc = state?.listing?.location || {};
+      const scope = place?.citycode ? { citycode: place.citycode, city: place.city, lat: place.lat, lon: place.lon } : { city: loc.city || '' };
+      return chrome.runtime.sendMessage({ type: 'suggest', q, scope });
     },
     async onHideSite() {
       const hiddenSites = [...new Set([...settings.hiddenSites, location.hostname])];

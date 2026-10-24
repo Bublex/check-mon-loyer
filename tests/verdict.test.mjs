@@ -158,3 +158,27 @@ test('Probabilité : pas de score sans le loyer hors charges, question sur le me
   assert.equal(v.question.topic, 'furnished');
   assert.deepEqual(v.question.no, { furnished: false });
 });
+
+test('Questions enchaînées : charges, puis époque, puis adresse ; « Je ne sais pas » passe à la suivante', () => {
+  // 1 200 € charges comprises, charges inconnues, époque inconnue.
+  const unknown = listing({ construction: null, rent: { amount: 1200, chargesIncluded: true, charges: null } });
+  const v = evaluate(unknown, grid);
+  assert.equal(v.status, 'depends');
+  assert.equal(v.spread[0], 'charges');
+  assert.equal(v.question.topic, 'charges');
+  assert.equal(v.question.type, 'number');
+  // Charges passées : le montant affiché dépasse tous les plafonds, on demande quand même l'époque pour resserrer le plafond.
+  const noCharges = evaluate({ ...unknown, skipped: ['charges'] }, grid);
+  assert.equal(noCharges.question.topic, 'period');
+  assert.equal(noCharges.question.type, 'yesno');
+  assert.equal(evaluate({ ...unknown, skipped: ['charges', 'period'] }, grid).question, null);
+
+  // Position approximative sur deux secteurs : 1 050 € conforme dans l'un (1 104 €), au-dessus dans l'autre (994 €).
+  const twoZones = [...grid, ...grid.map((r) => ({ ...r, zone: 'Saint-Ambroise', max: Math.round(r.max * 0.9 * 100) / 100 }))];
+  const near = listing({ rent: { amount: 1050, chargesIncluded: false } });
+  const w = evaluate(near, twoZones, { approximate: true });
+  assert.equal(w.status, 'depends');
+  assert.deepEqual(w.spread, ['address']);
+  assert.equal(w.question.topic, 'address');
+  assert.equal(evaluate({ ...near, skipped: ['address'] }, twoZones, { approximate: true }).question, null);
+});

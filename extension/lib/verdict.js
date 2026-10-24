@@ -108,12 +108,13 @@ export function evaluate(listing, rows, location = {}) {
     return { ...result, status: 'under', margin: roundEuro(ceiling.low - rent.hi) };
   }
   // Entre les deux : le verdict dépend d'une information manquante.
-  if (rent.lo == null && rent.hi > ceiling.high + TOLERANCE) spread.push('charges');
-  const depends = { ...result, status: 'depends', overByMax: roundEuro(rent.hi - ceiling.low) };
+  // Charges inconnues : le loyer hors charges l'est aussi ; c'est la première question posée.
+  if (rent.lo == null) spread.unshift('charges');
+  const depends = { ...result, status: 'depends', overByMax: roundEuro(rent.hi - ceiling.low), question: nextQuestion(candidates, listing, rent, spread, location.periodShares) };
   // Charges inconnues : le loyer hors charges l'est aussi, pas de probabilité possible.
   if (rent.lo == null) return depends;
   const odds = overOdds(candidates, listing, rent.lo, location.periodShares);
-  return { ...depends, probability: odds.probability, question: bestQuestion(candidates, listing, rent.lo, location.periodShares), weighted: Boolean(location.periodShares) };
+  return { ...depends, probability: odds.probability, weighted: Boolean(location.periodShares) };
 }
 
 // --- Probabilité de dépassement et question la plus utile ---
@@ -138,11 +139,16 @@ function overOdds(rows, listing, rentHC, shares) {
 
 const entropy = (p) => (p <= 0 || p >= 1 ? 0 : -(p * Math.log2(p) + (1 - p) * Math.log2(1 - p)));
 
-/** Question oui/non qui réduit le plus l'incertitude : époque (« avant 1946 ? »), meublé, maison. */
-function bestQuestion(rows, listing, rentHC, shares) {
+/**
+ * Question oui/non qui réduit le plus l'incertitude : époque (« avant 1946 ? »), meublé, maison.
+ * Loyer hors charges inconnu (`rough`, on compare alors le montant affiché) : à défaut d'une question qui tranche,
+ * celle qui partage le mieux les cas possibles, pour resserrer le plafond.
+ */
+function bestQuestion(rows, listing, rentHC, shares, skipped, rough) {
   const all = overOdds(rows, listing, rentHC, shares);
   const options = [];
   const split = (inYes, question) => {
+    if (skipped.has(question.topic)) return;
     const yes = rows.filter(inYes);
     const no = rows.filter((r) => !inYes(r));
     if (!yes.length || !no.length) return;
@@ -150,21 +156,45 @@ function bestQuestion(rows, listing, rentHC, shares) {
     const b = overOdds(no, listing, rentHC, shares);
     const m = a.total / all.total;
     const gain = entropy(all.probability) - m * entropy(a.probability) - (1 - m) * entropy(b.probability);
-    options.push({ ...question, gain });
+    options.push({ ...question, gain, balance: entropy(m) });
   };
   const c = listing.construction || {};
   const bounds = [...new Set(rows.map((r) => r.period.from).filter((y) => y != null))].sort((x, y) => x - y);
   for (const year of bounds) {
     split((r) => r.period.to != null && r.period.to < year, {
       topic: 'period',
+      type: 'yesno',
       year,
       text: `Le bâtiment date-t-il d’avant ${year} ?`,
       yes: { construction: { from: c.from ?? null, to: year - 1, label: c.from != null ? `${c.from} à ${year - 1}` : `Avant ${year}` } },
       no: { construction: { from: year, to: c.to ?? null, label: c.to != null ? `${year} à ${c.to}` : `${year} ou après` } },
     });
   }
-  if (listing.furnished == null) split((r) => r.furnished, { topic: 'furnished', text: 'Le logement est-il loué meublé ?', yes: { furnished: true }, no: { furnished: false } });
-  if (parseKind(listing.kind) == null) split((r) => r.kind === 'maison', { topic: 'kind', text: 'Est-ce une maison ?', yes: { kind: 'maison' }, no: { kind: 'appartement' } });
-  const best = options.sort((x, y) => y.gain - x.gain)[0];
-  return best && best.gain > 0.01 ? best : null;
+  if (listing.furnished == null) split((r) => r.furnished, { topic: 'furnished', type: 'yesno', text: 'Le logement est-il loué meublé ?', yes: { furnished: true }, no: { furnished: false } });
+  if (parseKind(listing.kind) == null) split((r) => r.kind === 'maison', { topic: 'kind', type: 'yesno', text: 'Est-ce une maison ?', yes: { kind: 'maison' }, no: { kind: 'appartement' } });
+  const best = [...options].sort((x, y) => y.gain - x.gain)[0];
+  const even = [...options].sort((x, y) => y.balance - x.balance)[0];
+  const pick = best && best.gain > 0.01 ? best : rough && even && even.balance > 0.1 ? even : null;
+  if (!pick) return null;
+  const { gain, balance, ...question } = pick;
+  return question;
+}
+
+const CHARGES_QUESTION = { topic: 'charges', type: 'number', text: 'Quel est le montant des charges ?', unit: '€ par mois' };
+const ROOMS_QUESTION = { topic: 'rooms', type: 'choice', text: 'Combien de pièces principales ?', options: [[1, '1'], [2, '2'], [3, '3'], [4, '4 et plus']] };
+const ADDRESS_QUESTION = { topic: 'address', type: 'text', text: 'Quelle est l’adresse exacte du logement ?' };
+
+/**
+ * Prochaine question, une à la fois : les charges (sans elles, pas de loyer hors charges), le nombre de pièces,
+ * la question oui/non la plus utile (époque, meublé, maison), enfin l'adresse exacte, la plus difficile à obtenir.
+ * Un sujet passé (« Je ne sais pas », dans `listing.skipped`) n'est plus proposé.
+ */
+function nextQuestion(rows, listing, rent, spread, shares) {
+  const skipped = new Set(listing.skipped || []);
+  if (rent.lo == null && !skipped.has('charges')) return CHARGES_QUESTION;
+  if (spread.includes('rooms') && !skipped.has('rooms')) return ROOMS_QUESTION;
+  const yesNo = bestQuestion(rows, listing, rent.lo ?? rent.hi, shares, skipped, rent.lo == null);
+  if (yesNo) return yesNo;
+  if (spread.includes('address') && !skipped.has('address')) return ADDRESS_QUESTION;
+  return null;
 }

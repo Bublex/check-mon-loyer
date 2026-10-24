@@ -3,6 +3,7 @@
 // seules la localisation du logement et la recherche de la grille partent vers ces services.
 
 import { checkListing } from './lib/check.js';
+import { suggestAddresses } from './lib/geo.js';
 import { humanError } from './lib/net.js';
 
 const CACHE_TTL = 15 * 60 * 1000;
@@ -49,6 +50,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(result);
       });
       return true;
+    case 'suggest': {
+      // Suggestions d'adresses du champ « Adresse » : seul le texte saisi et la ville du logement partent au géocodeur.
+      const scope = message.scope || {};
+      withTimeout(suggestAddresses(message.q, scope), 8000)
+        .then((items) => sendResponse({ items, city: scope.city || '' }))
+        .catch(() => sendResponse({ items: [], city: scope.city || '', error: true }));
+      return true;
+    }
     case 'clearBadge':
       if (sender.tab?.id !== undefined) updateBadge(sender.tab.id, null);
       break;
